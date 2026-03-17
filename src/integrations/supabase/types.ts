@@ -14,7 +14,156 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      hasil_klaster: {
+        Row: {
+          created_at: string
+          id: string
+          iterasi: number
+          klaster: number
+          siswa_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          iterasi?: number
+          klaster: number
+          siswa_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          iterasi?: number
+          klaster?: number
+          siswa_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hasil_klaster_siswa_id_fkey"
+            columns: ["siswa_id"]
+            isOneToOne: false
+            referencedRelation: "siswa"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jurusan: {
+        Row: {
+          created_at: string
+          id: string
+          nama: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          nama: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          nama?: string
+        }
+        Relationships: []
+      }
+      mata_pelajaran: {
+        Row: {
+          created_at: string
+          id: string
+          jurusan_id: string | null
+          nama: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          jurusan_id?: string | null
+          nama: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          jurusan_id?: string | null
+          nama?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mata_pelajaran_jurusan_id_fkey"
+            columns: ["jurusan_id"]
+            isOneToOne: false
+            referencedRelation: "jurusan"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nilai: {
+        Row: {
+          created_at: string
+          id: string
+          mata_pelajaran_id: string
+          nilai: number
+          siswa_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          mata_pelajaran_id: string
+          nilai?: number
+          siswa_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          mata_pelajaran_id?: string
+          nilai?: number
+          siswa_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nilai_mata_pelajaran_id_fkey"
+            columns: ["mata_pelajaran_id"]
+            isOneToOne: false
+            referencedRelation: "mata_pelajaran"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nilai_siswa_id_fkey"
+            columns: ["siswa_id"]
+            isOneToOne: false
+            referencedRelation: "siswa"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      siswa: {
+        Row: {
+          created_at: string
+          id: string
+          jurusan_id: string | null
+          nama: string
+          nis: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          jurusan_id?: string | null
+          nama: string
+          nis: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          jurusan_id?: string | null
+          nama?: string
+          nis?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "siswa_jurusan_id_fkey"
+            columns: ["jurusan_id"]
+            isOneToOne: false
+            referencedRelation: "jurusan"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
