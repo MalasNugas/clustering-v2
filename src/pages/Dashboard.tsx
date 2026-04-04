@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, BookOpen, GraduationCap } from "lucide-react";
+import { Users, BookOpen, GraduationCap, BarChart3 } from "lucide-react";
 
 export default function Dashboard() {
   const { data: siswaCount = 0 } = useQuery({
@@ -28,16 +28,28 @@ export default function Dashboard() {
     },
   });
 
+  const { data: nilaiCount = 0 } = useQuery({
+    queryKey: ["nilai-count"],
+    queryFn: async () => {
+      const { count } = await supabase.from("nilai").select("*", { count: "exact", head: true });
+      return count ?? 0;
+    },
+  });
+
   const stats = [
     { title: "Jumlah Siswa", value: siswaCount, icon: Users, color: "text-primary" },
     { title: "Jumlah Jurusan", value: jurusanCount, icon: GraduationCap, color: "text-accent" },
     { title: "Mata Pelajaran", value: mapelCount, icon: BookOpen, color: "text-warning" },
+    { title: "Total Nilai", value: nilaiCount, icon: BarChart3, color: "text-primary" },
   ];
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-6">Dashboard</h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <h2 className="text-2xl font-bold mb-2">Dashboard</h2>
+      <p className="text-muted-foreground mb-6 text-sm">
+        Klasterisasi Siswa Berdasarkan Tingkat Penguasaan Kompetensi Keahlian Menggunakan Algoritma K-Means
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat) => (
           <Card key={stat.title} className="shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between pb-2">

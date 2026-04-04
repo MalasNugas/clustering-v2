@@ -28,6 +28,17 @@ export default function MasterData() {
     },
   });
 
+  const { data: mapel = [] } = useQuery({
+    queryKey: ["mapel"],
+    queryFn: async () => {
+      const { data } = await supabase.from("mata_pelajaran").select("*, jurusan(nama)");
+      return data ?? [];
+    },
+  });
+
+  // Columns to skip (not subjects)
+  const SKIP_COLUMNS = new Set(["no", "nama peserta didik", "nisn", "nis", "s", "i", "a"]);
+
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -36,80 +47,115 @@ export default function MasterData() {
     try {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const allRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-      // Sheet 1: Jurusan (columns: nama)
-      const jurusanSheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jurusanRows = XLSX.utils.sheet_to_json<{ nama: string }>(jurusanSheet);
+      // Parse header metadata (rows before the table header)
+      let kelas = "";
+      let headerRowIdx = -1;
 
-      if (jurusanRows.length > 0) {
-        const { data: insertedJurusan, error: jErr } = await supabase
-          .from("jurusan")
-          .upsert(jurusanRows.map((r) => ({ nama: r.nama })), { onConflict: "nama", ignoreDuplicates: true })
-          .select();
-        if (jErr) throw jErr;
+      for (let i = 0; i < Math.min(allRows.length, 15); i++) {
+        const row = allRows[i];
+        if (!row || row.length === 0) continue;
 
-        // Sheet 2: Mata Pelajaran (columns: nama, jurusan)
-        if (workbook.SheetNames.length >= 2) {
-          const mapelSheet = workbook.Sheets[workbook.SheetNames[1]];
-          const mapelRows = XLSX.utils.sheet_to_json<{ nama: string; jurusan: string }>(mapelSheet);
-          
-          const { data: allJurusan } = await supabase.from("jurusan").select("*");
-          const jurusanMap = new Map((allJurusan ?? []).map((j) => [j.nama, j.id]));
-
-          const mapelData = mapelRows.map((r) => ({
-            nama: r.nama,
-            jurusan_id: jurusanMap.get(r.jurusan) ?? null,
-          }));
-          if (mapelData.length > 0) {
-            const { error: mErr } = await supabase.from("mata_pelajaran").insert(mapelData);
-            if (mErr) throw mErr;
-          }
+        const firstCell = String(row[0] ?? "").trim().toLowerCase();
+        if (firstCell === "kelas") {
+          kelas = String(row[2] ?? row[1] ?? "").trim();
         }
-
-        // Sheet 3: Siswa (columns: nis, nama, jurusan)
-        if (workbook.SheetNames.length >= 3) {
-          const siswaSheet = workbook.Sheets[workbook.SheetNames[2]];
-          const siswaRows = XLSX.utils.sheet_to_json<{ nis: string; nama: string; jurusan: string }>(siswaSheet);
-
-          const { data: allJurusan } = await supabase.from("jurusan").select("*");
-          const jurusanMap = new Map((allJurusan ?? []).map((j) => [j.nama, j.id]));
-
-          const siswaData = siswaRows.map((r) => ({
-            nis: String(r.nis),
-            nama: r.nama,
-            jurusan_id: jurusanMap.get(r.jurusan) ?? null,
-          }));
-          if (siswaData.length > 0) {
-            const { error: sErr } = await supabase.from("siswa").insert(siswaData);
-            if (sErr) throw sErr;
-          }
+        // Detect header row by looking for "No" or "NISN" or "NIS"
+        if (firstCell === "no") {
+          headerRowIdx = i;
+          break;
         }
+      }
 
-        // Sheet 4: Nilai (columns: nis, mata_pelajaran, nilai)
-        if (workbook.SheetNames.length >= 4) {
-          const nilaiSheet = workbook.Sheets[workbook.SheetNames[3]];
-          const nilaiRows = XLSX.utils.sheet_to_json<{ nis: string; mata_pelajaran: string; nilai: number }>(nilaiSheet);
+      if (headerRowIdx === -1) {
+        throw new Error("Format tidak dikenali. Pastikan ada baris header dengan kolom 'No'.");
+      }
 
-          const { data: allSiswa } = await supabase.from("siswa").select("id, nis");
-          const { data: allMapel } = await supabase.from("mata_pelajaran").select("id, nama");
-          const siswaMap = new Map((allSiswa ?? []).map((s) => [s.nis, s.id]));
-          const mapelMap = new Map((allMapel ?? []).map((m) => [m.nama, m.id]));
+      const headers: string[] = allRows[headerRowIdx].map((h: any) => String(h ?? "").trim());
 
-          const nilaiData = nilaiRows
-            .filter((r) => siswaMap.has(String(r.nis)) && mapelMap.has(r.mata_pelajaran))
-            .map((r) => ({
-              siswa_id: siswaMap.get(String(r.nis))!,
-              mata_pelajaran_id: mapelMap.get(r.mata_pelajaran)!,
-              nilai: r.nilai,
-            }));
-          if (nilaiData.length > 0) {
-            const { error: nErr } = await supabase.from("nilai").insert(nilaiData);
-            if (nErr) throw nErr;
+      // Find column indices
+      const namaCol = headers.findIndex((h) => h.toLowerCase().includes("nama"));
+      const nisnCol = headers.findIndex((h) => h.toLowerCase().includes("nisn") || h.toLowerCase() === "nis");
+
+      if (namaCol === -1 || nisnCol === -1) {
+        throw new Error("Kolom 'Nama' atau 'NISN/NIS' tidak ditemukan.");
+      }
+
+      // Subject columns = all columns that are NOT in skip list
+      const subjectColumns: { idx: number; name: string }[] = [];
+      headers.forEach((h, idx) => {
+        if (h && !SKIP_COLUMNS.has(h.toLowerCase())) {
+          subjectColumns.push({ idx, name: h });
+        }
+      });
+
+      // Extract jurusan from kelas (e.g., "12 TKP" -> "TKP")
+      const jurusanNama = kelas.replace(/^\d+\s*/, "").trim() || "Umum";
+
+      // 1. Upsert jurusan
+      const { data: jurusanResult, error: jErr } = await supabase
+        .from("jurusan")
+        .upsert([{ nama: jurusanNama }], { onConflict: "nama", ignoreDuplicates: true })
+        .select();
+      if (jErr) throw jErr;
+
+      const { data: allJurusan } = await supabase.from("jurusan").select("*");
+      const jurusanId = (allJurusan ?? []).find((j) => j.nama === jurusanNama)?.id;
+
+      // 2. Upsert mata pelajaran
+      if (subjectColumns.length > 0) {
+        for (const sc of subjectColumns) {
+          await supabase
+            .from("mata_pelajaran")
+            .upsert([{ nama: sc.name, jurusan_id: jurusanId }], { onConflict: "nama", ignoreDuplicates: false })
+            .select();
+        }
+      }
+      const { data: allMapel } = await supabase.from("mata_pelajaran").select("id, nama");
+      const mapelMap = new Map((allMapel ?? []).map((m) => [m.nama, m.id]));
+
+      // 3. Insert siswa
+      const dataRows = allRows.slice(headerRowIdx + 1).filter((row) => row && row[namaCol]);
+      const siswaData = dataRows.map((row) => ({
+        nis: String(row[nisnCol] ?? "").trim(),
+        nama: String(row[namaCol] ?? "").trim(),
+        jurusan_id: jurusanId ?? null,
+      }));
+
+      if (siswaData.length > 0) {
+        const { error: sErr } = await supabase.from("siswa").insert(siswaData);
+        if (sErr) throw sErr;
+      }
+
+      // 4. Insert nilai
+      const { data: allSiswa } = await supabase.from("siswa").select("id, nis");
+      const siswaMap = new Map((allSiswa ?? []).map((s) => [s.nis, s.id]));
+
+      const nilaiData: { siswa_id: string; mata_pelajaran_id: string; nilai: number }[] = [];
+      for (const row of dataRows) {
+        const nis = String(row[nisnCol] ?? "").trim();
+        const siswaId = siswaMap.get(nis);
+        if (!siswaId) continue;
+
+        for (const sc of subjectColumns) {
+          const val = row[sc.idx];
+          if (val != null && val !== "" && !isNaN(Number(val))) {
+            const mapelId = mapelMap.get(sc.name);
+            if (mapelId) {
+              nilaiData.push({ siswa_id: siswaId, mata_pelajaran_id: mapelId, nilai: Number(val) });
+            }
           }
         }
       }
 
-      toast.success("Data berhasil diimport!");
+      if (nilaiData.length > 0) {
+        const { error: nErr } = await supabase.from("nilai").insert(nilaiData);
+        if (nErr) throw nErr;
+      }
+
+      toast.success(`Berhasil import ${siswaData.length} siswa, ${subjectColumns.length} mata pelajaran, dan ${nilaiData.length} nilai!`);
       queryClient.invalidateQueries();
     } catch (err: any) {
       toast.error("Gagal import: " + (err.message || "Unknown error"));
@@ -129,6 +175,16 @@ export default function MasterData() {
     toast.success("Semua data berhasil dihapus");
     queryClient.invalidateQueries();
   };
+
+  // Build nilai map for display: siswa_id -> { mapel_nama: nilai }
+  const nilaiMap = new Map<string, Record<string, number>>();
+  for (const n of nilai as any[]) {
+    const sid = n.siswa?.nis ?? n.siswa_id;
+    if (!nilaiMap.has(n.siswa_id)) nilaiMap.set(n.siswa_id, {});
+    nilaiMap.get(n.siswa_id)![n.mata_pelajaran?.nama ?? ""] = n.nilai;
+  }
+
+  const mapelNames = (mapel as any[]).map((m) => m.nama);
 
   return (
     <div>
@@ -151,33 +207,44 @@ export default function MasterData() {
 
       <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle className="text-base">Data Siswa</CardTitle>
+          <CardTitle className="text-base">Data Siswa & Nilai</CardTitle>
         </CardHeader>
         <CardContent>
           {loadingSiswa ? (
             <p className="text-muted-foreground">Memuat data...</p>
           ) : siswa.length === 0 ? (
-            <p className="text-muted-foreground text-sm">Belum ada data. Silakan import file Excel.</p>
+            <p className="text-muted-foreground text-sm">Belum ada data. Silakan import file Excel leger nilai.</p>
           ) : (
-            <div className="overflow-auto max-h-[500px]">
+            <div className="overflow-auto max-h-[600px]">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-12">No</TableHead>
-                    <TableHead>NIS</TableHead>
+                    <TableHead>NISN</TableHead>
                     <TableHead>Nama</TableHead>
                     <TableHead>Jurusan</TableHead>
+                    {mapelNames.map((m) => (
+                      <TableHead key={m} className="text-center">{m}</TableHead>
+                    ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {siswa.map((s: any, i: number) => (
-                    <TableRow key={s.id}>
-                      <TableCell>{i + 1}</TableCell>
-                      <TableCell className="font-mono text-sm">{s.nis}</TableCell>
-                      <TableCell>{s.nama}</TableCell>
-                      <TableCell>{s.jurusan?.nama ?? "-"}</TableCell>
-                    </TableRow>
-                  ))}
+                  {(siswa as any[]).map((s, i) => {
+                    const sNilai = nilaiMap.get(s.id) ?? {};
+                    return (
+                      <TableRow key={s.id}>
+                        <TableCell>{i + 1}</TableCell>
+                        <TableCell className="font-mono text-sm">{s.nis}</TableCell>
+                        <TableCell>{s.nama}</TableCell>
+                        <TableCell>{s.jurusan?.nama ?? "-"}</TableCell>
+                        {mapelNames.map((m) => (
+                          <TableCell key={m} className="text-center">
+                            {sNilai[m] != null ? sNilai[m] : "-"}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
