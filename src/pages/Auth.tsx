@@ -14,7 +14,7 @@ import { GraduationCap } from "lucide-react";
 const loginSchema = z.object({
   email: z.string().trim().email("Email tidak valid").max(255),
   password: z.string().min(6, "Password minimal 6 karakter").max(100),
-});
+}).required();
 
 const registerSchema = z.object({
   nama_lengkap: z.string().trim().min(2, "Nama minimal 2 karakter").max(100),
