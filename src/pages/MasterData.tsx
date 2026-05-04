@@ -77,13 +77,15 @@ export default function MasterData() {
         }
         if (headerRowIdx === -1) continue;
 
-        // Subject columns: scan rightwards from namaCol+1, stop at first empty/null header
+        // Subject columns: scan rightwards from namaCol+1, skip empty, stop on metadata
         const headerRow = allRows[headerRowIdx];
         const subjectColumns: { idx: number; name: string }[] = [];
         for (let c = namaCol + 1; c < headerRow.length; c++) {
           const h = String(headerRow[c] ?? "").trim();
-          if (!h) break;
-          if (SKIP_COLUMNS.has(h.toLowerCase())) continue;
+          if (!h) continue;
+          const hl = h.toLowerCase();
+          if (STOP_HEADERS.has(hl)) break;
+          if (SKIP_HEADERS.has(hl)) continue;
           subjectColumns.push({ idx: c, name: h.toUpperCase() });
           allSubjectNames.add(h.toUpperCase());
         }
