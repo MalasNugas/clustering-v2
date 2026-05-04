@@ -36,8 +36,12 @@ export default function MasterData() {
     },
   });
 
-  // Columns to skip (not subjects)
-  const SKIP_COLUMNS = new Set(["no", "nama peserta didik", "nisn", "nis", "s", "i", "a"]);
+  // Headers that mark end of subject columns (next iteration block / metadata)
+  const STOP_HEADERS = new Set([
+    "centroid", "c1", "c2", "c3", "c4", "c5", "terdekat", "cluster",
+    "no", "nama", "nama peserta didik", "iterasi",
+  ]);
+  const SKIP_HEADERS = new Set(["nisn", "nis", "s", "i", "a"]);
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -73,13 +77,15 @@ export default function MasterData() {
         }
         if (headerRowIdx === -1) continue;
 
-        // Subject columns: scan rightwards from namaCol+1, stop at first empty/null header
+        // Subject columns: scan rightwards from namaCol+1, skip empty, stop on metadata
         const headerRow = allRows[headerRowIdx];
         const subjectColumns: { idx: number; name: string }[] = [];
         for (let c = namaCol + 1; c < headerRow.length; c++) {
           const h = String(headerRow[c] ?? "").trim();
-          if (!h) break;
-          if (SKIP_COLUMNS.has(h.toLowerCase())) continue;
+          if (!h) continue;
+          const hl = h.toLowerCase();
+          if (STOP_HEADERS.has(hl)) break;
+          if (SKIP_HEADERS.has(hl)) continue;
           subjectColumns.push({ idx: c, name: h.toUpperCase() });
           allSubjectNames.add(h.toUpperCase());
         }
