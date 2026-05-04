@@ -45,117 +45,102 @@ export default function MasterData() {
     setImporting(true);
 
     try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data);
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const allRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      const buf = await file.arrayBuffer();
+      const workbook = XLSX.read(buf);
 
-      // Parse header metadata (rows before the table header)
-      let kelas = "";
-      let headerRowIdx = -1;
+      let totalSiswa = 0;
+      let totalNilai = 0;
+      const allSubjectNames = new Set<string>();
 
-      for (let i = 0; i < Math.min(allRows.length, 15); i++) {
-        const row = allRows[i];
-        if (!row || row.length === 0) continue;
+      for (const sheetName of workbook.SheetNames) {
+        const sheet = workbook.Sheets[sheetName];
+        const allRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-        const firstCell = String(row[0] ?? "").trim().toLowerCase();
-        if (firstCell === "kelas") {
-          kelas = String(row[2] ?? row[1] ?? "").trim();
+        // Find header row: contains "No" and a name column
+        let headerRowIdx = -1;
+        let noCol = -1;
+        let namaCol = -1;
+        for (let i = 0; i < Math.min(allRows.length, 10); i++) {
+          const row = allRows[i] ?? [];
+          const nIdx = row.findIndex((c) => String(c ?? "").trim().toLowerCase() === "no");
+          const naIdx = row.findIndex((c) => String(c ?? "").trim().toUpperCase().startsWith("NAMA"));
+          if (nIdx !== -1 && naIdx !== -1) {
+            headerRowIdx = i;
+            noCol = nIdx;
+            namaCol = naIdx;
+            break;
+          }
         }
-        // Detect header row by looking for "No" or "NISN" or "NIS"
-        if (firstCell === "no") {
-          headerRowIdx = i;
-          break;
+        if (headerRowIdx === -1) continue;
+
+        // Subject columns: scan rightwards from namaCol+1, stop at first empty/null header
+        const headerRow = allRows[headerRowIdx];
+        const subjectColumns: { idx: number; name: string }[] = [];
+        for (let c = namaCol + 1; c < headerRow.length; c++) {
+          const h = String(headerRow[c] ?? "").trim();
+          if (!h) break;
+          if (SKIP_COLUMNS.has(h.toLowerCase())) continue;
+          subjectColumns.push({ idx: c, name: h.toUpperCase() });
+          allSubjectNames.add(h.toUpperCase());
         }
-      }
+        if (subjectColumns.length === 0) continue;
 
-      if (headerRowIdx === -1) {
-        throw new Error("Format tidak dikenali. Pastikan ada baris header dengan kolom 'No'.");
-      }
+        // Jurusan = sheet name cleaned
+        const jurusanNama = sheetName.replace(/^(NEW\s+)?/i, "").trim().toUpperCase();
 
-      const headers: string[] = allRows[headerRowIdx].map((h: any) => String(h ?? "").trim());
+        await supabase
+          .from("jurusan")
+          .upsert([{ nama: jurusanNama }], { onConflict: "nama", ignoreDuplicates: true });
+        const { data: allJurusan } = await supabase.from("jurusan").select("*");
+        const jurusanId = (allJurusan ?? []).find((j) => j.nama === jurusanNama)?.id;
 
-      // Find column indices
-      const namaCol = headers.findIndex((h) => h.toLowerCase().includes("nama"));
-      const nisnCol = headers.findIndex((h) => h.toLowerCase().includes("nisn") || h.toLowerCase() === "nis");
-
-      if (namaCol === -1 || nisnCol === -1) {
-        throw new Error("Kolom 'Nama' atau 'NISN/NIS' tidak ditemukan.");
-      }
-
-      // Subject columns = all columns that are NOT in skip list
-      const subjectColumns: { idx: number; name: string }[] = [];
-      headers.forEach((h, idx) => {
-        if (h && !SKIP_COLUMNS.has(h.toLowerCase())) {
-          subjectColumns.push({ idx, name: h });
-        }
-      });
-
-      // Extract jurusan from kelas (e.g., "12 TKP" -> "TKP")
-      const jurusanNama = kelas.replace(/^\d+\s*/, "").trim() || "Umum";
-
-      // 1. Upsert jurusan
-      const { data: jurusanResult, error: jErr } = await supabase
-        .from("jurusan")
-        .upsert([{ nama: jurusanNama }], { onConflict: "nama", ignoreDuplicates: true })
-        .select();
-      if (jErr) throw jErr;
-
-      const { data: allJurusan } = await supabase.from("jurusan").select("*");
-      const jurusanId = (allJurusan ?? []).find((j) => j.nama === jurusanNama)?.id;
-
-      // 2. Upsert mata pelajaran
-      if (subjectColumns.length > 0) {
+        // Upsert mata pelajaran (scoped by jurusan name in nama to avoid clash)
         for (const sc of subjectColumns) {
           await supabase
             .from("mata_pelajaran")
-            .upsert([{ nama: sc.name, jurusan_id: jurusanId }], { onConflict: "nama", ignoreDuplicates: false })
-            .select();
+            .upsert([{ nama: sc.name, jurusan_id: jurusanId }], { onConflict: "nama", ignoreDuplicates: false });
         }
-      }
-      const { data: allMapel } = await supabase.from("mata_pelajaran").select("id, nama");
-      const mapelMap = new Map((allMapel ?? []).map((m) => [m.nama, m.id]));
+        const { data: allMapel } = await supabase.from("mata_pelajaran").select("id, nama");
+        const mapelMap = new Map((allMapel ?? []).map((m) => [m.nama, m.id]));
 
-      // 3. Insert siswa
-      const dataRows = allRows.slice(headerRowIdx + 1).filter((row) => row && row[namaCol]);
-      const siswaData = dataRows.map((row) => ({
-        nis: String(row[nisnCol] ?? "").trim(),
-        nama: String(row[namaCol] ?? "").trim(),
-        jurusan_id: jurusanId ?? null,
-      }));
+        // Build siswa rows
+        const dataRows = allRows.slice(headerRowIdx + 1).filter((r) => r && r[namaCol] && r[noCol] != null);
+        const siswaData = dataRows.map((row) => ({
+          nis: `${jurusanNama}-${String(row[noCol]).padStart(3, "0")}`,
+          nama: String(row[namaCol] ?? "").trim(),
+          jurusan_id: jurusanId ?? null,
+        }));
 
-      if (siswaData.length > 0) {
-        const { error: sErr } = await supabase.from("siswa").insert(siswaData);
-        if (sErr) throw sErr;
-      }
+        if (siswaData.length > 0) {
+          await supabase.from("siswa").insert(siswaData);
+        }
+        totalSiswa += siswaData.length;
 
-      // 4. Insert nilai
-      const { data: allSiswa } = await supabase.from("siswa").select("id, nis");
-      const siswaMap = new Map((allSiswa ?? []).map((s) => [s.nis, s.id]));
+        const { data: allSiswa } = await supabase.from("siswa").select("id, nis");
+        const siswaMap = new Map((allSiswa ?? []).map((s) => [s.nis, s.id]));
 
-      const nilaiData: { siswa_id: string; mata_pelajaran_id: string; nilai: number }[] = [];
-      for (const row of dataRows) {
-        const nis = String(row[nisnCol] ?? "").trim();
-        const siswaId = siswaMap.get(nis);
-        if (!siswaId) continue;
-
-        for (const sc of subjectColumns) {
-          const val = row[sc.idx];
-          if (val != null && val !== "" && !isNaN(Number(val))) {
-            const mapelId = mapelMap.get(sc.name);
-            if (mapelId) {
-              nilaiData.push({ siswa_id: siswaId, mata_pelajaran_id: mapelId, nilai: Number(val) });
+        const nilaiData: { siswa_id: string; mata_pelajaran_id: string; nilai: number }[] = [];
+        for (const row of dataRows) {
+          const nis = `${jurusanNama}-${String(row[noCol]).padStart(3, "0")}`;
+          const siswaId = siswaMap.get(nis);
+          if (!siswaId) continue;
+          for (const sc of subjectColumns) {
+            const val = row[sc.idx];
+            if (val != null && val !== "" && !isNaN(Number(val))) {
+              const mapelId = mapelMap.get(sc.name);
+              if (mapelId) {
+                nilaiData.push({ siswa_id: siswaId, mata_pelajaran_id: mapelId, nilai: Number(val) });
+              }
             }
           }
         }
+        if (nilaiData.length > 0) {
+          await supabase.from("nilai").insert(nilaiData);
+        }
+        totalNilai += nilaiData.length;
       }
 
-      if (nilaiData.length > 0) {
-        const { error: nErr } = await supabase.from("nilai").insert(nilaiData);
-        if (nErr) throw nErr;
-      }
-
-      toast.success(`Berhasil import ${siswaData.length} siswa, ${subjectColumns.length} mata pelajaran, dan ${nilaiData.length} nilai!`);
+      toast.success(`Berhasil import ${totalSiswa} siswa, ${allSubjectNames.size} mata pelajaran, ${totalNilai} nilai!`);
       queryClient.invalidateQueries();
     } catch (err: any) {
       toast.error("Gagal import: " + (err.message || "Unknown error"));
