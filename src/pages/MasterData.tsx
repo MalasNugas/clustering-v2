@@ -36,8 +36,12 @@ export default function MasterData() {
     },
   });
 
-  // Columns to skip (not subjects)
-  const SKIP_COLUMNS = new Set(["no", "nama peserta didik", "nisn", "nis", "s", "i", "a"]);
+  // Headers that mark end of subject columns (next iteration block / metadata)
+  const STOP_HEADERS = new Set([
+    "centroid", "c1", "c2", "c3", "c4", "c5", "terdekat", "cluster",
+    "no", "nama", "nama peserta didik", "iterasi",
+  ]);
+  const SKIP_HEADERS = new Set(["nisn", "nis", "s", "i", "a"]);
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
