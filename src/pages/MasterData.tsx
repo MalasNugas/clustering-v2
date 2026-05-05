@@ -103,10 +103,12 @@ export default function MasterData() {
         const jurusanNama = sheetName.replace(/^(NEW\s+)?/i, "").trim().toUpperCase();
 
         // Ensure jurusan exists (no unique constraint, so check first)
-        const { data: existingJ } = await supabase.from("jurusan").select("*").eq("nama", jurusanNama).maybeSingle();
+        const { data: existingJ, error: errJ } = await supabase.from("jurusan").select("*").eq("nama", jurusanNama).maybeSingle();
+        if (errJ) throw new Error(`Cek jurusan gagal: ${errJ.message}`);
         let jurusanId = existingJ?.id;
         if (!jurusanId) {
-          const { data: newJ } = await supabase.from("jurusan").insert({ nama: jurusanNama }).select().single();
+          const { data: newJ, error: errNJ } = await supabase.from("jurusan").insert({ nama: jurusanNama }).select().single();
+          if (errNJ) throw new Error(`Insert jurusan gagal: ${errNJ.message}`);
           jurusanId = newJ?.id;
         }
 
@@ -116,9 +118,7 @@ export default function MasterData() {
         const newMapel = subjectColumns
           .filter((sc) => !existingNames.has(sc.name))
           .map((sc) => ({ nama: sc.name, jurusan_id: jurusanId }));
-        if (newMapel.length > 0) await supabase.from("mata_pelajaran").insert(newMapel);
-        const { data: allMapelForJurusan } = await supabase.from("mata_pelajaran").select("id, nama").eq("jurusan_id", jurusanId);
-        const mapelMap = new Map((allMapelForJurusan ?? []).map((m) => [m.nama, m.id]));
+        if (newMapel.length > 0) await insertBatched("mata_pelajaran", newMapel);
 
         // Build siswa rows — require only nama (No column may be blank in lower rows)
         const dataRows = allRows
