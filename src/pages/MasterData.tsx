@@ -317,8 +317,8 @@ export default function MasterData() {
   const pageRows = filteredSiswa.slice(startIdx, startIdx + pageSize);
 
   // reset to page 1 when filters/pageSize change
-  const filterKey = `${search}|${filterJurusan}|${pageSize}`;
-  useMemo(() => { setPage(1); }, [filterKey]);
+  // reset to page 1 when filters/pageSize change
+  useEffect(() => { setPage(1); }, [search, filterJurusan, pageSize]);
 
   return (
     <div>
