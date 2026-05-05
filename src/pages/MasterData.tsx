@@ -472,9 +472,9 @@ export default function MasterData() {
               <Input value={formNama} onChange={(e) => setFormNama(e.target.value)} placeholder="Nama lengkap" />
             </div>
             <div className="space-y-2">
-              <Label>Jurusan</Label>
+              <Label>Kelas</Label>
               <Select value={formJurusan} onValueChange={setFormJurusan}>
-                <SelectTrigger><SelectValue placeholder="Pilih jurusan" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Pilih kelas" /></SelectTrigger>
                 <SelectContent>
                   {jurusan.map((j) => (
                     <SelectItem key={j.id} value={j.id}>{j.nama}</SelectItem>
