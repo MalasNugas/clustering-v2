@@ -19,6 +19,7 @@ export type Database = {
           created_at: string
           id: string
           iterasi: number
+          jurusan_id: string | null
           klaster: number
           siswa_id: string
         }
@@ -26,6 +27,7 @@ export type Database = {
           created_at?: string
           id?: string
           iterasi?: number
+          jurusan_id?: string | null
           klaster: number
           siswa_id: string
         }
@@ -33,6 +35,7 @@ export type Database = {
           created_at?: string
           id?: string
           iterasi?: number
+          jurusan_id?: string | null
           klaster?: number
           siswa_id?: string
         }
