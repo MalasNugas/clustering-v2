@@ -58,8 +58,22 @@ export default function Clustering() {
   const { data: nilai = [] } = useQuery({
     queryKey: ["nilai"],
     queryFn: async () => {
-      const { data } = await supabase.from("nilai").select("*");
-      return data ?? [];
+      // Supabase default limit is 1000; fetch all in batches
+      const pageSize = 1000;
+      let from = 0;
+      const all: any[] = [];
+      while (true) {
+        const { data, error } = await supabase
+          .from("nilai")
+          .select("*")
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        all.push(...data);
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+      return all;
     },
   });
 
