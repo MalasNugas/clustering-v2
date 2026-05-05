@@ -58,8 +58,22 @@ export default function Clustering() {
   const { data: nilai = [] } = useQuery({
     queryKey: ["nilai"],
     queryFn: async () => {
-      const { data } = await supabase.from("nilai").select("*");
-      return data ?? [];
+      // Supabase default limit is 1000; fetch all in batches
+      const pageSize = 1000;
+      let from = 0;
+      const all: any[] = [];
+      while (true) {
+        const { data, error } = await supabase
+          .from("nilai")
+          .select("*")
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        all.push(...data);
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+      return all;
     },
   });
 
@@ -84,14 +98,43 @@ export default function Clustering() {
       const iterInfo: { jurusan: string; iters: number }[] = [];
       const allInsert: { siswa_id: string; klaster: number; iterasi: number; jurusan_id: string }[] = [];
 
-      // Run K-Means per jurusan (different jurusan have different subjects/dimensions)
+      // Preset to reproduce the reference Excel result
+      const PRESET: Record<string, { mapelOrder: string[]; centroids: number[][] }> = {
+        "KELAS 10": {
+          mapelOrder: ["KODING", "BI", "MTK", "INFOR", "KEJU"],
+          centroids: [
+            [76, 73, 75, 79, 89],
+            [80, 74, 70, 75, 75],
+            [91, 85, 78, 83, 80],
+          ],
+        },
+        "KELAS 11": {
+          mapelOrder: ["INFOR", "KIK", "KEJU"],
+          centroids: [
+            [71, 80, 89],
+            [83, 80, 90],
+            [92, 80, 91],
+          ],
+        },
+      };
+
+      // Run K-Means per jurusan
       for (const j of jurusan as any[]) {
         const jSiswa = (siswa as any[]).filter((s) => s.jurusan_id === j.id);
         const jMapel = (mapel as any[]).filter((m) => m.jurusan_id === j.id);
         if (jSiswa.length < k || jMapel.length === 0) continue;
 
-        // Order subjects deterministically by name
-        const sortedMapel = [...jMapel].sort((a, b) => a.nama.localeCompare(b.nama));
+        const preset = PRESET[j.nama];
+        let sortedMapel: any[];
+        if (preset) {
+          sortedMapel = preset.mapelOrder
+            .map((nm) => jMapel.find((m: any) => m.nama === nm))
+            .filter(Boolean);
+          // Append any leftover mapel not in preset
+          for (const m of jMapel) if (!sortedMapel.includes(m)) sortedMapel.push(m);
+        } else {
+          sortedMapel = [...jMapel].sort((a: any, b: any) => a.nama.localeCompare(b.nama));
+        }
 
         const dataPoints: DataPoint[] = jSiswa.map((s: any) => {
           const scores = sortedMapel.map((m: any) => {
@@ -103,7 +146,10 @@ export default function Clustering() {
           return { id: s.id, values: scores };
         });
 
-        const { results, iterations } = kMeans(dataPoints, k);
+        const initialCentroids =
+          preset && preset.centroids.length === k ? preset.centroids : undefined;
+
+        const { results, iterations } = kMeans(dataPoints, k, 100, initialCentroids);
         iterInfo.push({ jurusan: j.nama, iters: iterations });
 
         for (const r of results) {
