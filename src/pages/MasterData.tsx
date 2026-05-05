@@ -254,7 +254,7 @@ export default function MasterData() {
 
   const handleSave = async () => {
     if (!formNama.trim()) { toast.error("Nama wajib diisi"); return; }
-    if (!formJurusan) { toast.error("Jurusan wajib dipilih"); return; }
+    if (!formJurusan) { toast.error("Kelas wajib dipilih"); return; }
     try {
       let siswaId = editing?.id;
       const jurusanNama = jurusan.find((j) => j.id === formJurusan)?.nama ?? "X";
