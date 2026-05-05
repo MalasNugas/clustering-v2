@@ -43,6 +43,14 @@ export default function MasterData() {
   ]);
   const SKIP_HEADERS = new Set(["nisn", "nis", "s", "i", "a"]);
 
+  const insertBatched = async (table: "siswa" | "nilai" | "mata_pelajaran", rows: any[], size = 200) => {
+    for (let i = 0; i < rows.length; i += size) {
+      const chunk = rows.slice(i, i + size);
+      const { error } = await supabase.from(table).insert(chunk);
+      if (error) throw new Error(`Insert ${table} gagal: ${error.message}`);
+    }
+  };
+
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -95,10 +103,12 @@ export default function MasterData() {
         const jurusanNama = sheetName.replace(/^(NEW\s+)?/i, "").trim().toUpperCase();
 
         // Ensure jurusan exists (no unique constraint, so check first)
-        const { data: existingJ } = await supabase.from("jurusan").select("*").eq("nama", jurusanNama).maybeSingle();
+        const { data: existingJ, error: errJ } = await supabase.from("jurusan").select("*").eq("nama", jurusanNama).maybeSingle();
+        if (errJ) throw new Error(`Cek jurusan gagal: ${errJ.message}`);
         let jurusanId = existingJ?.id;
         if (!jurusanId) {
-          const { data: newJ } = await supabase.from("jurusan").insert({ nama: jurusanNama }).select().single();
+          const { data: newJ, error: errNJ } = await supabase.from("jurusan").insert({ nama: jurusanNama }).select().single();
+          if (errNJ) throw new Error(`Insert jurusan gagal: ${errNJ.message}`);
           jurusanId = newJ?.id;
         }
 
@@ -108,7 +118,7 @@ export default function MasterData() {
         const newMapel = subjectColumns
           .filter((sc) => !existingNames.has(sc.name))
           .map((sc) => ({ nama: sc.name, jurusan_id: jurusanId }));
-        if (newMapel.length > 0) await supabase.from("mata_pelajaran").insert(newMapel);
+        if (newMapel.length > 0) await insertBatched("mata_pelajaran", newMapel);
         const { data: allMapelForJurusan } = await supabase.from("mata_pelajaran").select("id, nama").eq("jurusan_id", jurusanId);
         const mapelMap = new Map((allMapelForJurusan ?? []).map((m) => [m.nama, m.id]));
 
@@ -123,12 +133,10 @@ export default function MasterData() {
           jurusan_id: jurusanId ?? null,
         }));
 
-        if (siswaData.length > 0) {
-          await supabase.from("siswa").insert(siswaData);
-        }
+        if (siswaData.length > 0) await insertBatched("siswa", siswaData);
         totalSiswa += siswaData.length;
 
-        const { data: allSiswa } = await supabase.from("siswa").select("id, nis");
+        const { data: allSiswa } = await supabase.from("siswa").select("id, nis").eq("jurusan_id", jurusanId);
         const siswaMap = new Map((allSiswa ?? []).map((s) => [s.nis, s.id]));
 
         const nilaiData: { siswa_id: string; mata_pelajaran_id: string; nilai: number }[] = [];
@@ -145,9 +153,7 @@ export default function MasterData() {
             }
           }
         });
-        if (nilaiData.length > 0) {
-          await supabase.from("nilai").insert(nilaiData);
-        }
+        if (nilaiData.length > 0) await insertBatched("nilai", nilaiData, 500);
         totalNilai += nilaiData.length;
       }
 
