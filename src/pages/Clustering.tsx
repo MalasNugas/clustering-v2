@@ -7,9 +7,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Play, RotateCcw } from "lucide-react";
+import { Play, RotateCcw, Download } from "lucide-react";
 import { toast } from "sonner";
 import { kMeans, DataPoint } from "@/lib/kmeans";
+import * as XLSX from "xlsx";
 
 const clusterColors = [
   "bg-primary text-primary-foreground",
@@ -185,6 +186,44 @@ export default function Clustering() {
     toast.success("Hasil klasterisasi direset");
   };
 
+  const handleExport = () => {
+    if ((hasilKlaster as any[]).length === 0) {
+      toast.error("Belum ada hasil klasterisasi untuk diekspor");
+      return;
+    }
+    const wb = XLSX.utils.book_new();
+    const klMap = new Map((hasilKlaster as any[]).map((h) => [h.siswa_id, h.klaster]));
+    const nilaiMap = new Map<string, Record<string, number>>();
+    for (const n of nilai as any[]) {
+      if (!nilaiMap.has(n.siswa_id)) nilaiMap.set(n.siswa_id, {});
+      nilaiMap.get(n.siswa_id)![n.mata_pelajaran_id] = Number(n.nilai);
+    }
+    for (const j of jurusan as any[]) {
+      const jSiswa = (siswa as any[]).filter((s) => s.jurusan_id === j.id);
+      if (jSiswa.length === 0) continue;
+      const jMapel = (mapel as any[])
+        .filter((m) => m.jurusan_id === j.id)
+        .sort((a, b) => a.nama.localeCompare(b.nama));
+      const header = ["No", "Nama", "Kelas", ...jMapel.map((m) => m.nama), "Klaster", "Keterangan"];
+      const rows = jSiswa.map((s: any, i: number) => {
+        const cl = klMap.get(s.id);
+        const sn = nilaiMap.get(s.id) ?? {};
+        return [
+          i + 1,
+          s.nama,
+          j.nama,
+          ...jMapel.map((m) => (sn[m.id] != null ? sn[m.id] : "")),
+          cl ?? "",
+          cl ? clusterLabels[cl as number] ?? "" : "",
+        ];
+      });
+      const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+      XLSX.utils.book_append_sheet(wb, ws, j.nama.substring(0, 31));
+    }
+    XLSX.writeFile(wb, `Hasil_Klasterisasi_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    toast.success("Berhasil mengekspor hasil klasterisasi");
+  };
+
   const klasterMap = new Map((hasilKlaster as any[]).map((h) => [h.siswa_id, h.klaster]));
 
   const clusterSummary = Array.from({ length: k }, (_, i) => {
@@ -230,6 +269,12 @@ export default function Clustering() {
                 Reset
               </Button>
             )}
+            {(hasilKlaster as any[]).length > 0 && (
+              <Button variant="secondary" onClick={handleExport}>
+                <Download className="mr-2 h-4 w-4" />
+                Export Excel
+              </Button>
+            )}
           </div>
           {iterationInfo.length > 0 && (
             <div className="mt-3 text-sm text-muted-foreground space-y-1">
@@ -241,7 +286,7 @@ export default function Clustering() {
             </div>
           )}
           <p className="mt-3 text-xs text-muted-foreground">
-            Klaster 1 = Rendah, 2 = Sedang, 3 = Tinggi (urutan tergantung sebaran data per jurusan).
+            Klaster 1 = Rendah, 2 = Sedang, 3 = Tinggi (urutan tergantung sebaran data per kelas).
           </p>
         </CardContent>
       </Card>
@@ -290,7 +335,7 @@ export default function Clustering() {
                         <TableRow>
                           <TableHead className="w-12">No</TableHead>
                           <TableHead>Nama</TableHead>
-                          <TableHead>Jurusan</TableHead>
+                          <TableHead>Kelas</TableHead>
                           {jMapel.map((m) => (
                             <TableHead key={m.id} className="text-center">{m.nama}</TableHead>
                           ))}

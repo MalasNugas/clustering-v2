@@ -38,7 +38,7 @@ export default function Dashboard() {
 
   const stats = [
     { title: "Jumlah Siswa", value: siswaCount, icon: Users, color: "text-primary" },
-    { title: "Jumlah Jurusan", value: jurusanCount, icon: GraduationCap, color: "text-accent" },
+    { title: "Jumlah Kelas", value: jurusanCount, icon: GraduationCap, color: "text-accent" },
     { title: "Mata Pelajaran", value: mapelCount, icon: BookOpen, color: "text-warning" },
     { title: "Total Nilai", value: nilaiCount, icon: BarChart3, color: "text-primary" },
   ];

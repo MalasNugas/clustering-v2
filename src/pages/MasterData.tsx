@@ -254,7 +254,7 @@ export default function MasterData() {
 
   const handleSave = async () => {
     if (!formNama.trim()) { toast.error("Nama wajib diisi"); return; }
-    if (!formJurusan) { toast.error("Jurusan wajib dipilih"); return; }
+    if (!formJurusan) { toast.error("Kelas wajib dipilih"); return; }
     try {
       let siswaId = editing?.id;
       const jurusanNama = jurusan.find((j) => j.id === formJurusan)?.nama ?? "X";
@@ -369,9 +369,9 @@ export default function MasterData() {
               />
             </div>
             <Select value={filterJurusan} onValueChange={setFilterJurusan}>
-              <SelectTrigger className="sm:w-64"><SelectValue placeholder="Filter jurusan" /></SelectTrigger>
+              <SelectTrigger className="sm:w-64"><SelectValue placeholder="Filter kelas" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Semua Jurusan</SelectItem>
+                <SelectItem value="all">Semua Kelas</SelectItem>
                 {jurusan.map((j) => (
                   <SelectItem key={j.id} value={j.id}>{j.nama}</SelectItem>
                 ))}
@@ -394,7 +394,7 @@ export default function MasterData() {
                   <TableRow>
                     <TableHead className="w-12">No</TableHead>
                     <TableHead>Nama</TableHead>
-                    <TableHead>Jurusan</TableHead>
+                    <TableHead>Kelas</TableHead>
                     {visibleMapel.map((m) => (
                       <TableHead key={m.id} className="text-center">{m.nama}</TableHead>
                     ))}
@@ -472,9 +472,9 @@ export default function MasterData() {
               <Input value={formNama} onChange={(e) => setFormNama(e.target.value)} placeholder="Nama lengkap" />
             </div>
             <div className="space-y-2">
-              <Label>Jurusan</Label>
+              <Label>Kelas</Label>
               <Select value={formJurusan} onValueChange={setFormJurusan}>
-                <SelectTrigger><SelectValue placeholder="Pilih jurusan" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Pilih kelas" /></SelectTrigger>
                 <SelectContent>
                   {jurusan.map((j) => (
                     <SelectItem key={j.id} value={j.id}>{j.nama}</SelectItem>
