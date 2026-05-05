@@ -43,6 +43,14 @@ export default function MasterData() {
   ]);
   const SKIP_HEADERS = new Set(["nisn", "nis", "s", "i", "a"]);
 
+  const insertBatched = async (table: "siswa" | "nilai" | "mata_pelajaran", rows: any[], size = 200) => {
+    for (let i = 0; i < rows.length; i += size) {
+      const chunk = rows.slice(i, i + size);
+      const { error } = await supabase.from(table).insert(chunk);
+      if (error) throw new Error(`Insert ${table} gagal: ${error.message}`);
+    }
+  };
+
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
