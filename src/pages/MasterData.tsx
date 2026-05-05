@@ -112,10 +112,12 @@ export default function MasterData() {
         const { data: allMapelForJurusan } = await supabase.from("mata_pelajaran").select("id, nama").eq("jurusan_id", jurusanId);
         const mapelMap = new Map((allMapelForJurusan ?? []).map((m) => [m.nama, m.id]));
 
-        // Build siswa rows
-        const dataRows = allRows.slice(headerRowIdx + 1).filter((r) => r && r[namaCol] && r[noCol] != null);
-        const siswaData = dataRows.map((row) => ({
-          nis: `${jurusanNama}-${String(row[noCol]).padStart(3, "0")}`,
+        // Build siswa rows — require only nama (No column may be blank in lower rows)
+        const dataRows = allRows
+          .slice(headerRowIdx + 1)
+          .filter((r) => r && String(r[namaCol] ?? "").trim() !== "");
+        const siswaData = dataRows.map((row, i) => ({
+          nis: `${jurusanNama}-${String(row[noCol] ?? i + 1).padStart(3, "0")}`,
           nama: String(row[namaCol] ?? "").trim(),
           jurusan_id: jurusanId ?? null,
         }));
