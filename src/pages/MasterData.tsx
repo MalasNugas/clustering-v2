@@ -468,8 +468,8 @@ export default function MasterData() {
             <AlertDialogCancel>Batal</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete}>Hapus</AlertDialogAction>
           </AlertDialogFooter>
-        </AlertDialogContent>
-      </Dialog>
+      </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
