@@ -112,10 +112,13 @@ export default function MasterData() {
         const { data: allMapelForJurusan } = await supabase.from("mata_pelajaran").select("id, nama").eq("jurusan_id", jurusanId);
         const mapelMap = new Map((allMapelForJurusan ?? []).map((m) => [m.nama, m.id]));
 
-        // Build siswa rows
-        const dataRows = allRows.slice(headerRowIdx + 1).filter((r) => r && r[namaCol] && r[noCol] != null);
-        const siswaData = dataRows.map((row) => ({
-          nis: `${jurusanNama}-${String(row[noCol]).padStart(3, "0")}`,
+        // Build siswa rows — require only nama (No column may be blank in lower rows)
+        const dataRows = allRows
+          .slice(headerRowIdx + 1)
+          .filter((r) => r && String(r[namaCol] ?? "").trim() !== "");
+        const makeNis = (i: number) => `${jurusanNama}-${String(i + 1).padStart(3, "0")}`;
+        const siswaData = dataRows.map((row, i) => ({
+          nis: makeNis(i),
           nama: String(row[namaCol] ?? "").trim(),
           jurusan_id: jurusanId ?? null,
         }));
@@ -129,10 +132,9 @@ export default function MasterData() {
         const siswaMap = new Map((allSiswa ?? []).map((s) => [s.nis, s.id]));
 
         const nilaiData: { siswa_id: string; mata_pelajaran_id: string; nilai: number }[] = [];
-        for (const row of dataRows) {
-          const nis = `${jurusanNama}-${String(row[noCol]).padStart(3, "0")}`;
-          const siswaId = siswaMap.get(nis);
-          if (!siswaId) continue;
+        dataRows.forEach((row, i) => {
+          const siswaId = siswaMap.get(makeNis(i));
+          if (!siswaId) return;
           for (const sc of subjectColumns) {
             const val = row[sc.idx];
             if (val != null && val !== "" && !isNaN(Number(val))) {
@@ -142,7 +144,7 @@ export default function MasterData() {
               }
             }
           }
-        }
+        });
         if (nilaiData.length > 0) {
           await supabase.from("nilai").insert(nilaiData);
         }
