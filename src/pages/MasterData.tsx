@@ -388,7 +388,7 @@ export default function MasterData() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredSiswa.map((s, i) => {
+                  {pageRows.map((s, i) => {
                     const sNilai = nilaiBySiswa.get(s.id) ?? {};
                     return (
                       <TableRow key={s.id}>
