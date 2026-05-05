@@ -392,7 +392,7 @@ export default function MasterData() {
                     const sNilai = nilaiBySiswa.get(s.id) ?? {};
                     return (
                       <TableRow key={s.id}>
-                        <TableCell>{i + 1}</TableCell>
+                        <TableCell>{startIdx + i + 1}</TableCell>
                         <TableCell className="font-medium">{s.nama}</TableCell>
                         <TableCell>{s.jurusan?.nama ?? "-"}</TableCell>
                         {visibleMapel.map((m) => (
