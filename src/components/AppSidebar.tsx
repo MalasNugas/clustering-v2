@@ -1,4 +1,4 @@
-import { LayoutDashboard, Database, GitBranch } from "lucide-react";
+import { LayoutDashboard, Database, GitBranch, User } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import {
@@ -17,6 +17,7 @@ const items = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Master Data", url: "/master-data", icon: Database },
   { title: "Klasterisasi", url: "/clustering", icon: GitBranch },
+  { title: "Profil", url: "/profile", icon: User },
 ];
 
 export function AppSidebar() {

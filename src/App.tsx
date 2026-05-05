@@ -9,6 +9,7 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import MasterData from "./pages/MasterData";
 import Clustering from "./pages/Clustering";
+import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -31,6 +32,7 @@ const App = () => (
             <Route path="/dashboard" element={<ProtectedLayout><Dashboard /></ProtectedLayout>} />
             <Route path="/master-data" element={<ProtectedLayout><MasterData /></ProtectedLayout>} />
             <Route path="/clustering" element={<ProtectedLayout><Clustering /></ProtectedLayout>} />
+            <Route path="/profile" element={<ProtectedLayout><Profile /></ProtectedLayout>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
