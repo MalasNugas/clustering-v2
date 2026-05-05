@@ -5,10 +5,25 @@ import { useAuth } from "@/hooks/useAuth";
 import { LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const [namaLengkap, setNamaLengkap] = useState<string>("");
+
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("profiles")
+      .select("nama_lengkap")
+      .eq("user_id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.nama_lengkap) setNamaLengkap(data.nama_lengkap);
+      });
+  }, [user]);
 
   const handleLogout = async () => {
     await signOut();
