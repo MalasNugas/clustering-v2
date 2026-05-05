@@ -369,9 +369,9 @@ export default function MasterData() {
               />
             </div>
             <Select value={filterJurusan} onValueChange={setFilterJurusan}>
-              <SelectTrigger className="sm:w-64"><SelectValue placeholder="Filter jurusan" /></SelectTrigger>
+              <SelectTrigger className="sm:w-64"><SelectValue placeholder="Filter kelas" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Semua Jurusan</SelectItem>
+                <SelectItem value="all">Semua Kelas</SelectItem>
                 {jurusan.map((j) => (
                   <SelectItem key={j.id} value={j.id}>{j.nama}</SelectItem>
                 ))}
