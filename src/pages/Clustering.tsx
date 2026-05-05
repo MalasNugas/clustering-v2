@@ -335,7 +335,7 @@ export default function Clustering() {
                         <TableRow>
                           <TableHead className="w-12">No</TableHead>
                           <TableHead>Nama</TableHead>
-                          <TableHead>Jurusan</TableHead>
+                          <TableHead>Kelas</TableHead>
                           {jMapel.map((m) => (
                             <TableHead key={m.id} className="text-center">{m.nama}</TableHead>
                           ))}
