@@ -417,6 +417,32 @@ export default function MasterData() {
               </Table>
             </div>
           )}
+
+          {filteredSiswa.length > 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4 pt-4 border-t">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Baris per halaman</span>
+                <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+                  <SelectTrigger className="h-8 w-20"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[10, 25, 50, 100, 200].map((n) => (
+                      <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {startIdx + 1}–{Math.min(startIdx + pageSize, filteredSiswa.length)} dari {filteredSiswa.length}
+              </div>
+              <div className="flex items-center gap-1">
+                <Button variant="outline" size="sm" onClick={() => setPage(1)} disabled={currentPage === 1}>«</Button>
+                <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>‹</Button>
+                <span className="px-3 text-sm">Hal {currentPage} / {totalPages}</span>
+                <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>›</Button>
+                <Button variant="outline" size="sm" onClick={() => setPage(totalPages)} disabled={currentPage === totalPages}>»</Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
