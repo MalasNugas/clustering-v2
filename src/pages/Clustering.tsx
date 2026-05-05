@@ -288,18 +288,6 @@ export default function Clustering() {
           <p className="mt-3 text-xs text-muted-foreground">
             Klaster 1 = Rendah, 2 = Sedang, 3 = Tinggi (urutan tergantung sebaran data per kelas).
           </p>
-          {iterationInfo.length > 0 && (
-            <div className="mt-3 text-sm text-muted-foreground space-y-1">
-              {iterationInfo.map((i) => (
-                <p key={i.jurusan}>
-                  <strong>{i.jurusan}</strong>: konvergen dalam {i.iters} iterasi
-                </p>
-              ))}
-            </div>
-          )}
-          <p className="mt-3 text-xs text-muted-foreground">
-            Klaster 1 = Rendah, 2 = Sedang, 3 = Tinggi (urutan tergantung sebaran data per jurusan).
-          </p>
         </CardContent>
       </Card>
 
