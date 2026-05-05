@@ -310,6 +310,16 @@ export default function MasterData() {
 
   const formMapel = formJurusan ? (mapelByJurusan.get(formJurusan) ?? []) : [];
 
+  // pagination derived
+  const totalPages = Math.max(1, Math.ceil(filteredSiswa.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const startIdx = (currentPage - 1) * pageSize;
+  const pageRows = filteredSiswa.slice(startIdx, startIdx + pageSize);
+
+  // reset to page 1 when filters/pageSize change
+  const filterKey = `${search}|${filterJurusan}|${pageSize}`;
+  useMemo(() => { setPage(1); }, [filterKey]);
+
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
