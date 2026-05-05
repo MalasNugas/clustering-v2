@@ -32,12 +32,15 @@ function mean(points: number[][]): number[] {
 export function kMeans(
   dataPoints: DataPoint[],
   k: number,
-  maxIterations = 100
+  maxIterations = 100,
+  initialCentroids?: number[][]
 ): { results: ClusterResult[]; centroids: number[][]; iterations: number } {
   if (dataPoints.length === 0 || k <= 0) return { results: [], centroids: [], iterations: 0 };
 
   const data = dataPoints.map((d) => d.values);
-  let centroids = randomCentroids(data, k);
+  let centroids = initialCentroids
+    ? initialCentroids.map((c) => [...c])
+    : data.slice(0, k).map((c) => [...c]); // deterministic: first K points
   let assignments = new Array(data.length).fill(0);
   let iterations = 0;
 

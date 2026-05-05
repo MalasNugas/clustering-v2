@@ -94,20 +94,23 @@ export default function MasterData() {
         // Jurusan = sheet name cleaned
         const jurusanNama = sheetName.replace(/^(NEW\s+)?/i, "").trim().toUpperCase();
 
-        await supabase
-          .from("jurusan")
-          .upsert([{ nama: jurusanNama }], { onConflict: "nama", ignoreDuplicates: true });
-        const { data: allJurusan } = await supabase.from("jurusan").select("*");
-        const jurusanId = (allJurusan ?? []).find((j) => j.nama === jurusanNama)?.id;
-
-        // Upsert mata pelajaran (scoped by jurusan name in nama to avoid clash)
-        for (const sc of subjectColumns) {
-          await supabase
-            .from("mata_pelajaran")
-            .upsert([{ nama: sc.name, jurusan_id: jurusanId }], { onConflict: "nama", ignoreDuplicates: false });
+        // Ensure jurusan exists (no unique constraint, so check first)
+        const { data: existingJ } = await supabase.from("jurusan").select("*").eq("nama", jurusanNama).maybeSingle();
+        let jurusanId = existingJ?.id;
+        if (!jurusanId) {
+          const { data: newJ } = await supabase.from("jurusan").insert({ nama: jurusanNama }).select().single();
+          jurusanId = newJ?.id;
         }
-        const { data: allMapel } = await supabase.from("mata_pelajaran").select("id, nama");
-        const mapelMap = new Map((allMapel ?? []).map((m) => [m.nama, m.id]));
+
+        // Insert mata pelajaran scoped per jurusan (one row per subject per jurusan)
+        const { data: existingMapel } = await supabase.from("mata_pelajaran").select("id, nama").eq("jurusan_id", jurusanId);
+        const existingNames = new Set((existingMapel ?? []).map((m) => m.nama));
+        const newMapel = subjectColumns
+          .filter((sc) => !existingNames.has(sc.name))
+          .map((sc) => ({ nama: sc.name, jurusan_id: jurusanId }));
+        if (newMapel.length > 0) await supabase.from("mata_pelajaran").insert(newMapel);
+        const { data: allMapelForJurusan } = await supabase.from("mata_pelajaran").select("id, nama").eq("jurusan_id", jurusanId);
+        const mapelMap = new Map((allMapelForJurusan ?? []).map((m) => [m.nama, m.id]));
 
         // Build siswa rows
         const dataRows = allRows.slice(headerRowIdx + 1).filter((r) => r && r[namaCol] && r[noCol] != null);
