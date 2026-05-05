@@ -32,6 +32,10 @@ export default function MasterData() {
   const [search, setSearch] = useState("");
   const [filterJurusan, setFilterJurusan] = useState<string>("all");
 
+  // pagination
+  const [pageSize, setPageSize] = useState<number>(25);
+  const [page, setPage] = useState<number>(1);
+
   // dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Siswa | null>(null);
