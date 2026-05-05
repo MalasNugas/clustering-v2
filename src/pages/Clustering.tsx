@@ -268,8 +268,17 @@ export default function Clustering() {
             ))}
           </div>
 
-          {siswaByJurusan.map(({ jurusan: j, siswa: jSiswa }) => (
-            jSiswa.length > 0 && (
+          {siswaByJurusan.map(({ jurusan: j, siswa: jSiswa }) => {
+            if (jSiswa.length === 0) return null;
+            const jMapel = (mapel as any[])
+              .filter((m) => m.jurusan_id === j.id)
+              .sort((a, b) => a.nama.localeCompare(b.nama));
+            const nilaiBySiswa = new Map<string, Record<string, number>>();
+            for (const n of nilai as any[]) {
+              if (!nilaiBySiswa.has(n.siswa_id)) nilaiBySiswa.set(n.siswa_id, {});
+              nilaiBySiswa.get(n.siswa_id)![n.mata_pelajaran_id] = Number(n.nilai);
+            }
+            return (
               <Card key={j.id} className="shadow-sm mb-6">
                 <CardHeader>
                   <CardTitle className="text-base">Hasil Klasterisasi — {j.nama}</CardTitle>
@@ -280,20 +289,29 @@ export default function Clustering() {
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-12">No</TableHead>
-                          <TableHead>NIS</TableHead>
                           <TableHead>Nama</TableHead>
-                          <TableHead>Klaster</TableHead>
+                          <TableHead>Jurusan</TableHead>
+                          {jMapel.map((m) => (
+                            <TableHead key={m.id} className="text-center">{m.nama}</TableHead>
+                          ))}
+                          <TableHead className="text-right sticky right-0 bg-background">Klaster</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {jSiswa.map((s: any, i: number) => {
                           const cl = klasterMap.get(s.id);
+                          const sNilai = nilaiBySiswa.get(s.id) ?? {};
                           return (
                             <TableRow key={s.id}>
                               <TableCell>{i + 1}</TableCell>
-                              <TableCell className="font-mono text-sm">{s.nis}</TableCell>
-                              <TableCell>{s.nama}</TableCell>
-                              <TableCell>
+                              <TableCell className="font-medium">{s.nama}</TableCell>
+                              <TableCell>{s.jurusan?.nama ?? j.nama}</TableCell>
+                              {jMapel.map((m) => (
+                                <TableCell key={m.id} className="text-center">
+                                  {sNilai[m.id] != null ? sNilai[m.id] : "-"}
+                                </TableCell>
+                              ))}
+                              <TableCell className="text-right sticky right-0 bg-background">
                                 {cl ? (
                                   <Badge className={clusterColors[(cl - 1) % clusterColors.length]}>
                                     Klaster {cl} — {clusterLabels[cl] ?? ""}
@@ -310,8 +328,8 @@ export default function Clustering() {
                   </div>
                 </CardContent>
               </Card>
-            )
-          ))}
+            );
+          })}
         </>
       )}
     </div>
