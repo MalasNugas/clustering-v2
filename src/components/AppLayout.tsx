@@ -39,7 +39,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <header className="h-14 flex items-center justify-between border-b bg-card px-4">
             <SidebarTrigger />
             <div className="flex items-center gap-3">
-              <span className="text-sm text-muted-foreground hidden sm:inline">{user?.email}</span>
+              <span className="text-sm text-muted-foreground hidden sm:inline">{namaLengkap || user?.user_metadata?.nama_lengkap || user?.email}</span>
               <Button variant="outline" size="sm" onClick={handleLogout}>
                 <LogOut className="mr-2 h-4 w-4" />
                 Logout
