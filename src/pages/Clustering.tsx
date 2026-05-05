@@ -19,11 +19,25 @@ const clusterColors = [
   "bg-secondary text-secondary-foreground",
 ];
 
+const clusterLabels: Record<number, string> = {
+  1: "Rendah",
+  2: "Sedang",
+  3: "Tinggi",
+};
+
 export default function Clustering() {
   const queryClient = useQueryClient();
   const [k, setK] = useState(3);
   const [running, setRunning] = useState(false);
-  const [iterationCount, setIterationCount] = useState<number | null>(null);
+  const [iterationInfo, setIterationInfo] = useState<{ jurusan: string; iters: number }[]>([]);
+
+  const { data: jurusan = [] } = useQuery({
+    queryKey: ["jurusan"],
+    queryFn: async () => {
+      const { data } = await supabase.from("jurusan").select("*").order("nama");
+      return data ?? [];
+    },
+  });
 
   const { data: siswa = [] } = useQuery({
     queryKey: ["siswa"],
@@ -36,7 +50,7 @@ export default function Clustering() {
   const { data: mapel = [] } = useQuery({
     queryKey: ["mapel"],
     queryFn: async () => {
-      const { data } = await supabase.from("mata_pelajaran").select("*").order("nama");
+      const { data } = await supabase.from("mata_pelajaran").select("*");
       return data ?? [];
     },
   });
@@ -65,29 +79,50 @@ export default function Clustering() {
     setRunning(true);
 
     try {
-      // Build data points: each student has scores for each subject
-      const dataPoints: DataPoint[] = siswa.map((s: any) => {
-        const scores = mapel.map((m: any) => {
-          const n = nilai.find((v: any) => v.siswa_id === s.id && v.mata_pelajaran_id === m.id);
-          return n ? Number(n.nilai) : 0;
+      await supabase.from("hasil_klaster").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+
+      const iterInfo: { jurusan: string; iters: number }[] = [];
+      const allInsert: { siswa_id: string; klaster: number; iterasi: number; jurusan_id: string }[] = [];
+
+      // Run K-Means per jurusan (different jurusan have different subjects/dimensions)
+      for (const j of jurusan as any[]) {
+        const jSiswa = (siswa as any[]).filter((s) => s.jurusan_id === j.id);
+        const jMapel = (mapel as any[]).filter((m) => m.jurusan_id === j.id);
+        if (jSiswa.length < k || jMapel.length === 0) continue;
+
+        // Order subjects deterministically by name
+        const sortedMapel = [...jMapel].sort((a, b) => a.nama.localeCompare(b.nama));
+
+        const dataPoints: DataPoint[] = jSiswa.map((s: any) => {
+          const scores = sortedMapel.map((m: any) => {
+            const n = (nilai as any[]).find(
+              (v) => v.siswa_id === s.id && v.mata_pelajaran_id === m.id
+            );
+            return n ? Number(n.nilai) : 0;
+          });
+          return { id: s.id, values: scores };
         });
-        return { id: s.id, values: scores };
-      });
 
-      const { results, iterations } = kMeans(dataPoints, k);
-      setIterationCount(iterations);
+        const { results, iterations } = kMeans(dataPoints, k);
+        iterInfo.push({ jurusan: j.nama, iters: iterations });
 
-      // Clear old results and insert new
-      await supabase.from("hasil_klaster").delete().neq("id", "");
-      const insertData = results.map((r) => ({
-        siswa_id: r.id,
-        klaster: r.cluster,
-        iterasi: iterations,
-      }));
-      const { error } = await supabase.from("hasil_klaster").insert(insertData);
-      if (error) throw error;
+        for (const r of results) {
+          allInsert.push({
+            siswa_id: r.id,
+            klaster: r.cluster,
+            iterasi: iterations,
+            jurusan_id: j.id,
+          });
+        }
+      }
 
-      toast.success(`Klasterisasi selesai! ${iterations} iterasi.`);
+      if (allInsert.length > 0) {
+        const { error } = await supabase.from("hasil_klaster").insert(allInsert);
+        if (error) throw error;
+      }
+
+      setIterationInfo(iterInfo);
+      toast.success(`Klasterisasi selesai untuk ${iterInfo.length} jurusan!`);
       refetchHasil();
       queryClient.invalidateQueries({ queryKey: ["hasil-klaster"] });
     } catch (err: any) {
@@ -98,20 +133,24 @@ export default function Clustering() {
   };
 
   const handleReset = async () => {
-    await supabase.from("hasil_klaster").delete().neq("id", "");
-    setIterationCount(null);
+    await supabase.from("hasil_klaster").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    setIterationInfo([]);
     refetchHasil();
     toast.success("Hasil klasterisasi direset");
   };
 
-  // Build results map
-  const klasterMap = new Map(hasilKlaster.map((h: any) => [h.siswa_id, h.klaster]));
+  const klasterMap = new Map((hasilKlaster as any[]).map((h) => [h.siswa_id, h.klaster]));
 
-  // Cluster summary
   const clusterSummary = Array.from({ length: k }, (_, i) => {
-    const members = hasilKlaster.filter((h: any) => h.klaster === i + 1);
-    return { cluster: i + 1, count: members.length };
+    const members = (hasilKlaster as any[]).filter((h) => h.klaster === i + 1);
+    return { cluster: i + 1, count: members.length, label: clusterLabels[i + 1] ?? `K${i + 1}` };
   });
+
+  // Group siswa by jurusan for display
+  const siswaByJurusan = (jurusan as any[]).map((j) => ({
+    jurusan: j,
+    siswa: (siswa as any[]).filter((s) => s.jurusan_id === j.id),
+  }));
 
   return (
     <div>
@@ -139,22 +178,29 @@ export default function Clustering() {
               <Play className="mr-2 h-4 w-4" />
               {running ? "Memproses..." : "Jalankan K-Means"}
             </Button>
-            {hasilKlaster.length > 0 && (
+            {(hasilKlaster as any[]).length > 0 && (
               <Button variant="outline" onClick={handleReset}>
                 <RotateCcw className="mr-2 h-4 w-4" />
                 Reset
               </Button>
             )}
           </div>
-          {iterationCount !== null && (
-            <p className="mt-3 text-sm text-muted-foreground">
-              Konvergen dalam <strong>{iterationCount}</strong> iterasi
-            </p>
+          {iterationInfo.length > 0 && (
+            <div className="mt-3 text-sm text-muted-foreground space-y-1">
+              {iterationInfo.map((i) => (
+                <p key={i.jurusan}>
+                  <strong>{i.jurusan}</strong>: konvergen dalam {i.iters} iterasi
+                </p>
+              ))}
+            </div>
           )}
+          <p className="mt-3 text-xs text-muted-foreground">
+            Klaster 1 = Rendah, 2 = Sedang, 3 = Tinggi (urutan tergantung sebaran data per jurusan).
+          </p>
         </CardContent>
       </Card>
 
-      {hasilKlaster.length > 0 && (
+      {(hasilKlaster as any[]).length > 0 && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
             {clusterSummary.map((cs) => (
@@ -162,7 +208,9 @@ export default function Clustering() {
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-muted-foreground">Klaster {cs.cluster}</p>
+                      <p className="text-sm text-muted-foreground">
+                        Klaster {cs.cluster} — {cs.label}
+                      </p>
                       <p className="text-2xl font-bold">{cs.count} siswa</p>
                     </div>
                     <Badge className={clusterColors[(cs.cluster - 1) % clusterColors.length]}>
@@ -174,48 +222,50 @@ export default function Clustering() {
             ))}
           </div>
 
-          <Card className="shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-base">Hasil Klasterisasi</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-auto max-h-[500px]">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-12">No</TableHead>
-                      <TableHead>NIS</TableHead>
-                      <TableHead>Nama</TableHead>
-                      <TableHead>Jurusan</TableHead>
-                      <TableHead>Klaster</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {siswa.map((s: any, i: number) => {
-                      const cl = klasterMap.get(s.id);
-                      return (
-                        <TableRow key={s.id}>
-                          <TableCell>{i + 1}</TableCell>
-                          <TableCell className="font-mono text-sm">{s.nis}</TableCell>
-                          <TableCell>{s.nama}</TableCell>
-                          <TableCell>{s.jurusan?.nama ?? "-"}</TableCell>
-                          <TableCell>
-                            {cl ? (
-                              <Badge className={clusterColors[(cl - 1) % clusterColors.length]}>
-                                Klaster {cl}
-                              </Badge>
-                            ) : (
-                              "-"
-                            )}
-                          </TableCell>
+          {siswaByJurusan.map(({ jurusan: j, siswa: jSiswa }) => (
+            jSiswa.length > 0 && (
+              <Card key={j.id} className="shadow-sm mb-6">
+                <CardHeader>
+                  <CardTitle className="text-base">Hasil Klasterisasi — {j.nama}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-auto max-h-[500px]">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12">No</TableHead>
+                          <TableHead>NIS</TableHead>
+                          <TableHead>Nama</TableHead>
+                          <TableHead>Klaster</TableHead>
                         </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
+                      </TableHeader>
+                      <TableBody>
+                        {jSiswa.map((s: any, i: number) => {
+                          const cl = klasterMap.get(s.id);
+                          return (
+                            <TableRow key={s.id}>
+                              <TableCell>{i + 1}</TableCell>
+                              <TableCell className="font-mono text-sm">{s.nis}</TableCell>
+                              <TableCell>{s.nama}</TableCell>
+                              <TableCell>
+                                {cl ? (
+                                  <Badge className={clusterColors[(cl - 1) % clusterColors.length]}>
+                                    Klaster {cl} — {clusterLabels[cl] ?? ""}
+                                  </Badge>
+                                ) : (
+                                  "-"
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          ))}
         </>
       )}
     </div>
