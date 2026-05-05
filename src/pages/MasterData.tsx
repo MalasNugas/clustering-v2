@@ -119,6 +119,8 @@ export default function MasterData() {
           .filter((sc) => !existingNames.has(sc.name))
           .map((sc) => ({ nama: sc.name, jurusan_id: jurusanId }));
         if (newMapel.length > 0) await insertBatched("mata_pelajaran", newMapel);
+        const { data: allMapelForJurusan } = await supabase.from("mata_pelajaran").select("id, nama").eq("jurusan_id", jurusanId);
+        const mapelMap = new Map((allMapelForJurusan ?? []).map((m) => [m.nama, m.id]));
 
         // Build siswa rows — require only nama (No column may be blank in lower rows)
         const dataRows = allRows
@@ -131,12 +133,10 @@ export default function MasterData() {
           jurusan_id: jurusanId ?? null,
         }));
 
-        if (siswaData.length > 0) {
-          await supabase.from("siswa").insert(siswaData);
-        }
+        if (siswaData.length > 0) await insertBatched("siswa", siswaData);
         totalSiswa += siswaData.length;
 
-        const { data: allSiswa } = await supabase.from("siswa").select("id, nis");
+        const { data: allSiswa } = await supabase.from("siswa").select("id, nis").eq("jurusan_id", jurusanId);
         const siswaMap = new Map((allSiswa ?? []).map((s) => [s.nis, s.id]));
 
         const nilaiData: { siswa_id: string; mata_pelajaran_id: string; nilai: number }[] = [];
@@ -153,9 +153,7 @@ export default function MasterData() {
             }
           }
         });
-        if (nilaiData.length > 0) {
-          await supabase.from("nilai").insert(nilaiData);
-        }
+        if (nilaiData.length > 0) await insertBatched("nilai", nilaiData, 500);
         totalNilai += nilaiData.length;
       }
 
