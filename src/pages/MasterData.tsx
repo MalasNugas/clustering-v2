@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,10 @@ export default function MasterData() {
   // filters
   const [search, setSearch] = useState("");
   const [filterJurusan, setFilterJurusan] = useState<string>("all");
+
+  // pagination
+  const [pageSize, setPageSize] = useState<number>(25);
+  const [page, setPage] = useState<number>(1);
 
   // dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -306,6 +310,16 @@ export default function MasterData() {
 
   const formMapel = formJurusan ? (mapelByJurusan.get(formJurusan) ?? []) : [];
 
+  // pagination derived
+  const totalPages = Math.max(1, Math.ceil(filteredSiswa.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const startIdx = (currentPage - 1) * pageSize;
+  const pageRows = filteredSiswa.slice(startIdx, startIdx + pageSize);
+
+  // reset to page 1 when filters/pageSize change
+  // reset to page 1 when filters/pageSize change
+  useEffect(() => { setPage(1); }, [search, filterJurusan, pageSize]);
+
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
@@ -374,11 +388,11 @@ export default function MasterData() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredSiswa.map((s, i) => {
+                  {pageRows.map((s, i) => {
                     const sNilai = nilaiBySiswa.get(s.id) ?? {};
                     return (
                       <TableRow key={s.id}>
-                        <TableCell>{i + 1}</TableCell>
+                        <TableCell>{startIdx + i + 1}</TableCell>
                         <TableCell className="font-medium">{s.nama}</TableCell>
                         <TableCell>{s.jurusan?.nama ?? "-"}</TableCell>
                         {visibleMapel.map((m) => (
@@ -401,6 +415,32 @@ export default function MasterData() {
                   })}
                 </TableBody>
               </Table>
+            </div>
+          )}
+
+          {filteredSiswa.length > 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4 pt-4 border-t">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Baris per halaman</span>
+                <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+                  <SelectTrigger className="h-8 w-20"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[10, 25, 50, 100, 200].map((n) => (
+                      <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {startIdx + 1}–{Math.min(startIdx + pageSize, filteredSiswa.length)} dari {filteredSiswa.length}
+              </div>
+              <div className="flex items-center gap-1">
+                <Button variant="outline" size="sm" onClick={() => setPage(1)} disabled={currentPage === 1}>«</Button>
+                <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>‹</Button>
+                <span className="px-3 text-sm">Hal {currentPage} / {totalPages}</span>
+                <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>›</Button>
+                <Button variant="outline" size="sm" onClick={() => setPage(totalPages)} disabled={currentPage === totalPages}>»</Button>
+              </div>
             </div>
           )}
         </CardContent>
