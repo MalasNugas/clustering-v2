@@ -5,10 +5,25 @@ import { useAuth } from "@/hooks/useAuth";
 import { LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const [namaLengkap, setNamaLengkap] = useState<string>("");
+
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("profiles")
+      .select("nama_lengkap")
+      .eq("user_id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.nama_lengkap) setNamaLengkap(data.nama_lengkap);
+      });
+  }, [user]);
 
   const handleLogout = async () => {
     await signOut();
@@ -24,7 +39,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <header className="h-14 flex items-center justify-between border-b bg-card px-4">
             <SidebarTrigger />
             <div className="flex items-center gap-3">
-              <span className="text-sm text-muted-foreground hidden sm:inline">{user?.email}</span>
+              <span className="text-sm text-muted-foreground hidden sm:inline">{namaLengkap || user?.user_metadata?.nama_lengkap || user?.email}</span>
               <Button variant="outline" size="sm" onClick={handleLogout}>
                 <LogOut className="mr-2 h-4 w-4" />
                 Logout
