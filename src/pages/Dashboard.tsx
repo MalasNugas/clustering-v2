@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, BookOpen, GraduationCap, BarChart3 } from "lucide-react";
+import { Users, BookOpen, GraduationCap, BarChart3, BookMarked } from "lucide-react";
 
 export default function Dashboard() {
   const { data: siswaCount = 0 } = useQuery({
@@ -36,6 +36,14 @@ export default function Dashboard() {
     },
   });
 
+  const { data: mapelList = [] } = useQuery({
+    queryKey: ["mapel-list"],
+    queryFn: async () => {
+      const { data } = await supabase.from("mata_pelajaran").select("nama").order("nama");
+      return data?.map((m) => m.nama) ?? [];
+    },
+  });
+
   const stats = [
     { title: "Jumlah Siswa", value: siswaCount, icon: Users, color: "text-primary" },
     { title: "Jumlah Kelas", value: jurusanCount, icon: GraduationCap, color: "text-accent" },
@@ -62,6 +70,29 @@ export default function Dashboard() {
           </Card>
         ))}
       </div>
+
+      <Card className="mt-6 shadow-sm">
+        <CardHeader className="flex flex-row items-center gap-3 pb-2">
+          <BookMarked className="h-5 w-5 text-primary" />
+          <CardTitle className="text-base font-semibold">Daftar Mata Pelajaran</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {mapelList.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Belum ada data mata pelajaran.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {mapelList.map((nama) => (
+                <span
+                  key={nama}
+                  className="inline-flex items-center rounded-md bg-primary/10 px-2.5 py-1 text-sm font-medium text-primary"
+                >
+                  {nama}
+                </span>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
