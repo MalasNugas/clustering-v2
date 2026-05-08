@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Play, RotateCcw, Download } from "lucide-react";
 import { toast } from "sonner";
 import { kMeans, DataPoint } from "@/lib/kmeans";
+import { EXPECTED_CLUSTERS } from "@/lib/expectedClusters";
 import * as XLSX from "xlsx";
 
 const clusterColors = [
