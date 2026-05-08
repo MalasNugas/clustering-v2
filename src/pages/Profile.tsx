@@ -40,20 +40,12 @@ export default function Profile() {
       return;
     }
     setLoading(true);
-    const { data: existing } = await supabase
+    const { error } = await supabase
       .from("profiles")
-      .select("id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    const { error } = existing
-      ? await supabase
-          .from("profiles")
-          .update({ nama_lengkap: parsed.data.nama_lengkap })
-          .eq("user_id", user.id)
-      : await supabase
-          .from("profiles")
-          .insert({ user_id: user.id, nama_lengkap: parsed.data.nama_lengkap });
+      .upsert(
+        { user_id: user.id, nama_lengkap: parsed.data.nama_lengkap },
+        { onConflict: "user_id" }
+      );
 
     setLoading(false);
     if (error) {
