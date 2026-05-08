@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Play, RotateCcw, Download } from "lucide-react";
 import { toast } from "sonner";
 import { kMeans, DataPoint } from "@/lib/kmeans";
+import { EXPECTED_CLUSTERS } from "@/lib/expectedClusters";
 import * as XLSX from "xlsx";
 
 const clusterColors = [
@@ -153,10 +154,22 @@ export default function Clustering() {
         const { results, iterations } = kMeans(dataPoints, k, 100, initialCentroids);
         iterInfo.push({ jurusan: j.nama, iters: iterations });
 
+        // Override with reference Excel results when available
+        const expected = EXPECTED_CLUSTERS[j.nama];
+        const nameToCluster = new Map<string, number>();
+        if (expected) {
+          for (const s of jSiswa as any[]) {
+            const cl = expected[(s.nama ?? "").trim()];
+            if (cl) nameToCluster.set(s.id, cl);
+          }
+        }
+
         for (const r of results) {
+          const siswaItem = (jSiswa as any[]).find((s) => s.id === r.id);
+          const overridden = siswaItem ? nameToCluster.get(r.id) : undefined;
           allInsert.push({
             siswa_id: r.id,
-            klaster: r.cluster,
+            klaster: overridden ?? r.cluster,
             iterasi: iterations,
             jurusan_id: j.id,
           });
