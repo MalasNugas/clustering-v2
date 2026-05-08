@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, BookOpen, GraduationCap, BarChart3 } from "lucide-react";
+import { Users, BookOpen, GraduationCap, BarChart3, BookMarked } from "lucide-react";
 
 export default function Dashboard() {
   const { data: siswaCount = 0 } = useQuery({
