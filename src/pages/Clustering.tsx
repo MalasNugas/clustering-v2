@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Play, RotateCcw, Download } from "lucide-react";
 import { toast } from "sonner";
 import { kMeans, DataPoint } from "@/lib/kmeans";
@@ -32,6 +33,7 @@ export default function Clustering() {
   const [k, setK] = useState(3);
   const [running, setRunning] = useState(false);
   const [iterationInfo, setIterationInfo] = useState<{ jurusan: string; iters: number }[]>([]);
+  const [klasterFilter, setKlasterFilter] = useState<string>("all");
 
   const { data: jurusan = [] } = useQuery({
     queryKey: ["jurusan"],
@@ -182,7 +184,7 @@ export default function Clustering() {
       }
 
       setIterationInfo(iterInfo);
-      toast.success(`Klasterisasi selesai untuk ${iterInfo.length} jurusan!`);
+      toast.success(`Klasterisasi selesai untuk ${iterInfo.length} kelas!`);
       refetchHasil();
       queryClient.invalidateQueries({ queryKey: ["hasil-klaster"] });
     } catch (err: any) {
