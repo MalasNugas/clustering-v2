@@ -290,6 +290,22 @@ export default function Clustering() {
                 Export Excel
               </Button>
             )}
+            {(hasilKlaster as any[]).length > 0 && (
+              <div className="space-y-1.5">
+                <Label>Filter Klaster</Label>
+                <Select value={klasterFilter} onValueChange={setKlasterFilter}>
+                  <SelectTrigger className="w-44">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Klaster</SelectItem>
+                    <SelectItem value="1">Klaster 1 — Rendah</SelectItem>
+                    <SelectItem value="2">Klaster 2 — Sedang</SelectItem>
+                    <SelectItem value="3">Klaster 3 — Tinggi</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           {iterationInfo.length > 0 && (
             <div className="mt-3 text-sm text-muted-foreground space-y-1">
@@ -358,7 +374,18 @@ export default function Clustering() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {jSiswa.map((s: any, i: number) => {
+                        {[...jSiswa]
+                          .filter((s: any) => {
+                            if (klasterFilter === "all") return true;
+                            return klasterMap.get(s.id) === Number(klasterFilter);
+                          })
+                          .sort((a: any, b: any) => {
+                            const ca = klasterMap.get(a.id) ?? 999;
+                            const cb = klasterMap.get(b.id) ?? 999;
+                            if (ca !== cb) return ca - cb;
+                            return (a.nama ?? "").localeCompare(b.nama ?? "");
+                          })
+                          .map((s: any, i: number) => {
                           const cl = klasterMap.get(s.id);
                           const sNilai = nilaiBySiswa.get(s.id) ?? {};
                           return (
