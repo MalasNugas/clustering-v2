@@ -23,9 +23,9 @@ const clusterColors = [
 ];
 
 const clusterLabels: Record<number, string> = {
-  1: "Rendah",
+  1: "Tinggi",
   2: "Sedang",
-  3: "Tinggi",
+  3: "Rendah",
 };
 
 export default function Clustering() {
@@ -299,28 +299,17 @@ export default function Clustering() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Semua Klaster</SelectItem>
-                    <SelectItem value="1">Klaster 1 — Rendah</SelectItem>
+                    <SelectItem value="1">Klaster 1 — Tinggi</SelectItem>
                     <SelectItem value="2">Klaster 2 — Sedang</SelectItem>
-                    <SelectItem value="3">Klaster 3 — Tinggi</SelectItem>
+                    <SelectItem value="3">Klaster 3 — Rendah</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             )}
           </div>
-          {iterationInfo.length > 0 && (
-            <div className="mt-3 text-sm text-muted-foreground space-y-1">
-              {iterationInfo.map((i) => (
-                <p key={i.jurusan}>
-                  <strong>{i.jurusan}</strong>: konvergen dalam {i.iters} iterasi
-                </p>
-              ))}
-            </div>
-          )}
-          <p className="mt-3 text-xs text-muted-foreground">
-            Klaster 1 = Rendah, 2 = Sedang, 3 = Tinggi (urutan tergantung sebaran data per kelas).
-          </p>
         </CardContent>
       </Card>
+
 
       {(hasilKlaster as any[]).length > 0 && (
         <>
