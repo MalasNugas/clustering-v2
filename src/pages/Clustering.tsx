@@ -23,9 +23,9 @@ const clusterColors = [
 ];
 
 const clusterLabels: Record<number, string> = {
-  1: "Rendah",
+  1: "Tinggi",
   2: "Sedang",
-  3: "Tinggi",
+  3: "Rendah",
 };
 
 export default function Clustering() {
