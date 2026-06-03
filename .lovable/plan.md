@@ -1,17 +1,18 @@
-Masalahnya bukan dari file Excel. Import gagal karena aturan keamanan database hanya mengizinkan akun dengan role `guru` untuk menambah data `jurusan`, sementara tabel `user_roles` saat ini kosong, jadi akun yang login belum dianggap sebagai guru.
+## Masalah
+Saat deploy ke Vercel, `npm install` gagal dengan error `ERESOLVE`. Penyebabnya adalah konflik *peer dependency* antara `lovable-tagger@1.1.13` (memerlukan Vite versi lama) dan `vite@8.0.0` yang terpasang di project.
 
-Rencana perbaikan:
+Plugin `lovable-tagger` hanya dipakai saat mode **development** di Lovable Editor (`vite.config.ts` baris 15: `mode === "development" && componentTagger()`). Plugin ini sama sekali tidak diperlukan untuk build production di Vercel.
 
-1. Tetapkan role `guru` untuk akun yang sedang digunakan
-   - Tambahkan data role ke tabel `user_roles` untuk user yang terakhir login.
-   - Ini akan membuat import `jurusan`, `mata_pelajaran`, `siswa`, dan `nilai` lolos aturan keamanan.
+## Solusi
+1. **Hapus `lovable-tagger` dari `devDependencies` di `package.json`**  
+   Agar Vercel tidak mencoba menginstal plugin yang memicu konflik peer dependency.
 
-2. Verifikasi aturan role
-   - Cek bahwa role `guru` sudah terbaca oleh fungsi pengecekan akses database.
-   - Pastikan import tidak lagi berhenti di tahap `Insert jurusan`.
+2. **Ubah `vite.config.ts` ke dynamic import**  
+   Gunakan `import()` bersyarat hanya saat `mode === 'development'`, sehingga Vite tidak mencoba memuat modul tersebut saat build di Vercel.
 
-3. Perbaiki pesan error di halaman Master Data
-   - Jika user belum login atau belum punya role guru, tampilkan pesan yang lebih jelas seperti: “Silakan login sebagai guru sebelum import data.”
-   - Ini menggantikan pesan teknis `row-level security policy` agar tidak membingungkan.
+3. **Verifikasi build lokal**  
+   Pastikan `npm install` dan `vite build` berjalan tanpa error setelah perubahan.
 
-Catatan: Setelah ini, silakan login ulang bila masih gagal, lalu coba import ulang file `DATA GABUNGAN 10,11.xlsx`.
+## Detail Teknis
+- File yang diubah: `package.json`, `vite.config.ts`
+- Tidak ada perubahan pada aplikasi — ini hanya perbaikan konfigurasi build.
