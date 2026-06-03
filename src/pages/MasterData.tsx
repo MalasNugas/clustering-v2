@@ -111,6 +111,11 @@ export default function MasterData() {
     if (!file) return;
     setImporting(true);
     try {
+      // Pastikan user sudah login sebagai guru sebelum import
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        throw new Error("Silakan login sebagai guru terlebih dahulu sebelum import data.");
+      }
       const buf = await file.arrayBuffer();
       const workbook = XLSX.read(buf);
 
@@ -194,7 +199,12 @@ export default function MasterData() {
       toast.success(`Berhasil import ${totalSiswa} siswa, ${allSubjectNames.size} mata pelajaran, ${totalNilai} nilai!`);
       queryClient.invalidateQueries();
     } catch (err: any) {
-      toast.error("Gagal import: " + (err.message || "Unknown error"));
+      const msg = String(err?.message || "Unknown error");
+      if (msg.includes("row-level security") || msg.includes("violates row-level security")) {
+        toast.error("Akses ditolak: akun Anda belum memiliki role 'guru'. Silakan login sebagai guru lalu coba lagi.");
+      } else {
+        toast.error("Gagal import: " + msg);
+      }
     } finally {
       setImporting(false);
       e.target.value = "";
