@@ -8,7 +8,7 @@ export default defineConfig(async ({ mode }) => {
 
   if (mode === "development") {
     try {
-      const { componentTagger } = await import("lovable-tagger");
+      const { componentTagger } = await import(/* @vite-ignore */ "lovable-tagger" as string);
       plugins.push(componentTagger());
     } catch {
       // lovable-tagger is optional and only used in Lovable editor
