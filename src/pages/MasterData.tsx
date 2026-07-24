@@ -328,12 +328,16 @@ export default function MasterData() {
   // ============= DISPLAY =============
   const filteredSiswa = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return (siswa as Siswa[]).filter((s) => {
+    return (siswa as any[]).filter((s) => {
       if (filterJurusan !== "all" && s.jurusan_id !== filterJurusan) return false;
+      if (filterYear !== "all") {
+        const y = s.created_at ? new Date(s.created_at).getFullYear().toString() : "";
+        if (y !== filterYear) return false;
+      }
       if (q && !s.nama.toLowerCase().includes(q)) return false;
       return true;
-    });
-  }, [siswa, search, filterJurusan]);
+    }) as Siswa[];
+  }, [siswa, search, filterJurusan, filterYear]);
 
   // mapel columns shown depend on filter — if specific jurusan, show only that jurusan's mapel
   const visibleMapel = useMemo(() => {
@@ -351,7 +355,7 @@ export default function MasterData() {
 
   // reset to page 1 when filters/pageSize change
   // reset to page 1 when filters/pageSize change
-  useEffect(() => { setPage(1); }, [search, filterJurusan, pageSize]);
+  useEffect(() => { setPage(1); }, [search, filterJurusan, filterYear, pageSize]);
 
   return (
     <div>
@@ -388,11 +392,20 @@ export default function MasterData() {
               />
             </div>
             <Select value={filterJurusan} onValueChange={setFilterJurusan}>
-              <SelectTrigger className="sm:w-64"><SelectValue placeholder="Filter kelas" /></SelectTrigger>
+              <SelectTrigger className="sm:w-56"><SelectValue placeholder="Filter kelas" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Semua Kelas</SelectItem>
                 {jurusan.map((j) => (
                   <SelectItem key={j.id} value={j.id}>{j.nama}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterYear} onValueChange={setFilterYear}>
+              <SelectTrigger className="sm:w-40"><SelectValue placeholder="Filter tahun" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Tahun</SelectItem>
+                {availableYears.map((y) => (
+                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
