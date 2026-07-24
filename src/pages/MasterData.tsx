@@ -31,6 +31,7 @@ export default function MasterData() {
   // filters
   const [search, setSearch] = useState("");
   const [filterJurusan, setFilterJurusan] = useState<string>("all");
+  const [filterYear, setFilterYear] = useState<string>("all");
 
   // pagination
   const [pageSize, setPageSize] = useState<number>(25);
@@ -49,9 +50,17 @@ export default function MasterData() {
     queryKey: ["siswa"],
     queryFn: async () => {
       const { data } = await supabase.from("siswa").select("*, jurusan(nama)").order("nama");
-      return (data ?? []) as Siswa[];
+      return (data ?? []) as (Siswa & { created_at: string })[];
     },
   });
+
+  const availableYears = useMemo(() => {
+    const years = new Set<number>();
+    (siswa as any[]).forEach((s) => {
+      if (s.created_at) years.add(new Date(s.created_at).getFullYear());
+    });
+    return Array.from(years).sort((a, b) => b - a);
+  }, [siswa]);
 
   const { data: nilai = [] } = useQuery({
     queryKey: ["nilai"],
