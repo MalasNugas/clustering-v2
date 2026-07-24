@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, BookOpen, GraduationCap, BarChart3, BookMarked } from "lucide-react";
+import { MasterDataAccessBanner } from "@/components/MasterDataAccessBanner";
 
 export default function Dashboard() {
   const { data: siswaCount = 0 } = useQuery({
@@ -57,6 +58,7 @@ export default function Dashboard() {
       <p className="text-muted-foreground mb-6 text-sm">
         Klasterisasi Siswa Berdasarkan Tingkat Penguasaan Kompetensi Keahlian Menggunakan Algoritma K-Means
       </p>
+      <MasterDataAccessBanner />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat) => (
           <Card key={stat.title} className="shadow-sm">

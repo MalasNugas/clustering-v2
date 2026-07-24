@@ -1,21 +1,60 @@
-## Jawaban singkat
 
-Ya — perubahan role sudah berlaku juga di Vercel, **selama** deployment Vercel Anda memakai kredensial Lovable Cloud yang sama (`VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` / `VITE_SUPABASE_PROJECT_ID` yang sama dengan `.env` proyek ini).
+## 1. Filter Tahun di Master Data
 
-## Kenapa
+- Tambah dropdown "Tahun" di halaman Master Data (di atas tab Siswa/Nilai/Mapel/Jurusan).
+- Opsi diisi otomatis dari `DISTINCT EXTRACT(YEAR FROM created_at)` pada tabel `siswa` (+ opsi "Semua Tahun").
+- Filter diterapkan ke query list Siswa dan Nilai (nilai difilter via join siswa) menggunakan `.gte('created_at', 'YYYY-01-01').lt(...)`.
+- Default: tahun terbaru yang tersedia.
 
-Pemberian role `guru` untuk `njdeti6@gmail.com` dilakukan di **database** (tabel `user_roles`), bukan di kode. Frontend Vercel dan frontend Lovable menunjuk ke database yang sama, jadi keduanya membaca role yang sama. Tidak perlu redeploy Vercel.
+## 2. Role Admin
 
-## Yang perlu dilakukan user
+Database:
+- Tambah nilai `'admin'` sudah ada di enum `app_role` (sudah ada).
+- Migrasi: INSERT role `admin` ke `user_roles` untuk user dengan email `marchellino940@gmail.com` (lookup via `auth.users`).
+- Jika email belum terdaftar, migrasi akan gagal aman — user diminta signup dulu lewat halaman Auth, lalu jalankan grant.
 
-1. Di deployment Vercel, **logout** dari akun `njdeti6@gmail.com`.
-2. **Login ulang** — supaya session/token baru mengambil role terbaru.
-3. Buka halaman **Master Data** / **Klasterisasi** → seharusnya sudah bisa CRUD & reset.
+Karena akun admin belum tentu ada, alur:
+1. User signup `marchellino940@gmail.com` di halaman `/auth` (password apapun).
+2. Jalankan migrasi yang: hapus role `guru` default untuk email tsb (jika ada) & INSERT role `admin`.
 
-## Kalau ternyata belum berubah di Vercel
+## 3. Gate Menu & Akses Master Data
 
-Kemungkinan penyebabnya salah satu dari:
-- Environment variable di Vercel menunjuk ke project Supabase yang berbeda (misal sudah mulai migrasi ke Supabase pribadi seperti di plan sebelumnya). Kalau begitu, role harus di-set juga di database Supabase tersebut.
-- Cache browser / session lama — hard refresh (Ctrl+Shift+R) setelah login ulang.
+Sidebar (`AppSidebar.tsx`):
+- Fetch role user via `user_roles`.
+- Admin: lihat semua menu + menu baru "Kelola Guru" & "Permintaan Akses".
+- Guru: Dashboard, Klasterisasi, Profil. Master Data ditampilkan HANYA jika ada row aktif di `master_data_access` (lihat bawah).
 
-Kalau mau, saya bisa bantu cek env var Vercel Anda mengarah ke mana, atau siapkan SQL yang sama untuk dijalankan di Supabase pribadi Anda.
+Route guard (`ProtectedRoute` diperluas jadi `RoleRoute`):
+- `/master-data`: butuh admin ATAU guru dengan izin aktif.
+- `/admin/*`: butuh admin.
+
+## 4. Request & Approve Akses Master Data
+
+Tabel baru `master_data_access_requests`:
+- `user_id` (guru), `status` ('pending'|'approved'|'rejected'), `requested_at`, `reviewed_at`, `reviewed_by`.
+- RLS:
+  - Guru: SELECT & INSERT row miliknya sendiri.
+  - Admin: SELECT semua, UPDATE status.
+- Fungsi helper `has_master_data_access(uid)` = admin OR ada request approved untuk uid.
+- RLS tabel `siswa/nilai/mapel/jurusan` diubah dari `has_role('guru')` → `has_master_data_access(auth.uid())` supaya guru approved bisa CRUD.
+
+Halaman baru:
+- **`/admin/guru`** (Admin): list semua guru dari `profiles` + role, dengan status akses Master Data (approved/pending/none) — informasi saja.
+- **`/admin/requests`** (Admin): tabel permintaan pending, tombol Approve / Reject.
+- **Banner di Dashboard untuk Guru tanpa akses**: tombol "Minta Akses Master Data" → insert request pending. Jika sudah pending, tampilkan status.
+
+## Ringkasan file yang berubah/baru
+
+- Migrasi SQL: tabel `master_data_access_requests` + grants + RLS + function + update RLS 4 tabel + grant admin ke marchellino940@gmail.com.
+- `src/hooks/useUserRole.tsx` (baru): return `{ role, hasMasterDataAccess, loading }`.
+- `src/components/AppSidebar.tsx`: menu dinamis per role.
+- `src/components/ProtectedRoute.tsx` atau `RoleRoute.tsx`: prop `requireRole` / `requireMasterDataAccess`.
+- `src/pages/MasterData.tsx`: dropdown filter tahun.
+- `src/pages/AdminGuru.tsx` & `src/pages/AdminRequests.tsx` (baru).
+- `src/pages/Dashboard.tsx`: banner request akses untuk guru tanpa izin.
+- `src/App.tsx`: route `/admin/guru`, `/admin/requests`.
+
+## Catatan
+
+- Password akun admin tidak disimpan — Anda signup manual di `/auth`, lalu migrasi mempromosikan akun tsb jadi admin.
+- Filter tahun pakai `created_at` sesuai pilihan Anda; kalau nanti butuh "tahun ajaran" (mis. 2024/2025) bisa ditambah kolom terpisah.
