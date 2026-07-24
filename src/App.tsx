@@ -10,12 +10,22 @@ import Dashboard from "./pages/Dashboard";
 import MasterData from "./pages/MasterData";
 import Clustering from "./pages/Clustering";
 import Profile from "./pages/Profile";
+import AdminGuru from "./pages/AdminGuru";
+import AdminRequests from "./pages/AdminRequests";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const ProtectedLayout = ({ children }: { children: React.ReactNode }) => (
-  <ProtectedRoute>
+const ProtectedLayout = ({
+  children,
+  requireRole,
+  requireMasterDataAccess,
+}: {
+  children: React.ReactNode;
+  requireRole?: "admin" | "guru" | "siswa";
+  requireMasterDataAccess?: boolean;
+}) => (
+  <ProtectedRoute requireRole={requireRole} requireMasterDataAccess={requireMasterDataAccess}>
     <AppLayout>{children}</AppLayout>
   </ProtectedRoute>
 );
@@ -30,9 +40,32 @@ const App = () => (
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/dashboard" element={<ProtectedLayout><Dashboard /></ProtectedLayout>} />
-            <Route path="/master-data" element={<ProtectedLayout><MasterData /></ProtectedLayout>} />
+            <Route
+              path="/master-data"
+              element={
+                <ProtectedLayout requireMasterDataAccess>
+                  <MasterData />
+                </ProtectedLayout>
+              }
+            />
             <Route path="/clustering" element={<ProtectedLayout><Clustering /></ProtectedLayout>} />
             <Route path="/profile" element={<ProtectedLayout><Profile /></ProtectedLayout>} />
+            <Route
+              path="/admin/guru"
+              element={
+                <ProtectedLayout requireRole="admin">
+                  <AdminGuru />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/admin/requests"
+              element={
+                <ProtectedLayout requireRole="admin">
+                  <AdminRequests />
+                </ProtectedLayout>
+              }
+            />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
