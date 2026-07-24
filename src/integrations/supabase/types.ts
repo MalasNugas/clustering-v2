@@ -250,7 +250,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      has_master_data_access: { Args: { _user_id: string }; Returns: boolean }
+      [_ in never]: never
     }
     Enums: {
       app_role: "admin" | "guru" | "siswa"
