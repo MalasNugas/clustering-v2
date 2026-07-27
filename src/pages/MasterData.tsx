@@ -466,8 +466,9 @@ export default function MasterData() {
                     <TableHead>Nama</TableHead>
                     <TableHead>Kelas</TableHead>
                     {visibleMapel.map((m) => (
-                      <TableHead key={m.id} className="text-center">{m.nama}</TableHead>
+                      <TableHead key={m.key} className="text-center">{m.nama}</TableHead>
                     ))}
+
                     <TableHead className="text-right sticky right-0 bg-background">Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
