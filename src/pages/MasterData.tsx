@@ -107,6 +107,23 @@ export default function MasterData() {
   ]);
   const SKIP_HEADERS = new Set(["nisn", "nis", "s", "i", "a"]);
 
+  // Mata pelajaran yang dipakai sebagai variabel perhitungan klasterisasi
+  const FEATURE_KLS10 = [
+    "koding", "bahasa inggris", "matematika", "mtk", "projek ipas", "informatika", "infor",
+  ];
+  const FEATURE_KLS11 = ["kreativitas, inovasi, dan kewirausahaan", "kik"];
+
+  const isFeatureMapel = (sheetName: string, mapelName: string, isLastColumn: boolean) => {
+    const kelas10 = sheetName.toUpperCase().replace("KLAS", "KLS").includes("KLS 10");
+    const nm = mapelName.trim().toLowerCase();
+    if (isLastColumn) return true; // kolom terakhir = mata pelajaran kejuruan
+    if (kelas10) {
+      return FEATURE_KLS10.some((f) => nm === f || nm.startsWith(f)) || nm.startsWith("dasar");
+    }
+    return FEATURE_KLS11.some((f) => nm === f || nm.startsWith(f));
+  };
+
+
   const insertBatched = async (table: "siswa" | "nilai" | "mata_pelajaran", rows: any[], size = 200) => {
     for (let i = 0; i < rows.length; i += size) {
       const chunk = rows.slice(i, i + size);
