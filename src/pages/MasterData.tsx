@@ -480,11 +480,15 @@ export default function MasterData() {
                         <TableCell>{startIdx + i + 1}</TableCell>
                         <TableCell className="font-medium">{s.nama}</TableCell>
                         <TableCell>{s.jurusan?.nama ?? "-"}</TableCell>
-                        {visibleMapel.map((m) => (
-                          <TableCell key={m.id} className="text-center">
-                            {sNilai[m.id] != null ? sNilai[m.id] : "-"}
-                          </TableCell>
-                        ))}
+                        {visibleMapel.map((m) => {
+                          const id = m.ids.find((x) => sNilai[x] != null);
+                          return (
+                            <TableCell key={m.key} className="text-center">
+                              {id ? sNilai[id] : "-"}
+                            </TableCell>
+                          );
+                        })}
+
                         <TableCell className="text-right sticky right-0 bg-background">
                           <div className="flex justify-end gap-1">
                             <Button size="icon" variant="ghost" onClick={() => openEdit(s)}>
