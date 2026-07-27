@@ -103,18 +103,21 @@ export type Database = {
       mata_pelajaran: {
         Row: {
           created_at: string
+          dipakai_klaster: boolean
           id: string
           jurusan_id: string | null
           nama: string
         }
         Insert: {
           created_at?: string
+          dipakai_klaster?: boolean
           id?: string
           jurusan_id?: string | null
           nama: string
         }
         Update: {
           created_at?: string
+          dipakai_klaster?: boolean
           id?: string
           jurusan_id?: string | null
           nama?: string

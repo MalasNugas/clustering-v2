@@ -107,6 +107,23 @@ export default function MasterData() {
   ]);
   const SKIP_HEADERS = new Set(["nisn", "nis", "s", "i", "a"]);
 
+  // Mata pelajaran yang dipakai sebagai variabel perhitungan klasterisasi
+  const FEATURE_KLS10 = [
+    "koding", "bahasa inggris", "matematika", "mtk", "projek ipas", "informatika", "infor",
+  ];
+  const FEATURE_KLS11 = ["kreativitas, inovasi, dan kewirausahaan", "kik"];
+
+  const isFeatureMapel = (sheetName: string, mapelName: string, isLastColumn: boolean) => {
+    const kelas10 = sheetName.toUpperCase().replace("KLAS", "KLS").includes("KLS 10");
+    const nm = mapelName.trim().toLowerCase();
+    if (isLastColumn) return true; // kolom terakhir = mata pelajaran kejuruan
+    if (kelas10) {
+      return FEATURE_KLS10.some((f) => nm === f || nm.startsWith(f)) || nm.startsWith("dasar");
+    }
+    return FEATURE_KLS11.some((f) => nm === f || nm.startsWith(f));
+  };
+
+
   const insertBatched = async (table: "siswa" | "nilai" | "mata_pelajaran", rows: any[], size = 200) => {
     for (let i = 0; i < rows.length; i += size) {
       const chunk = rows.slice(i, i + size);
@@ -169,8 +186,14 @@ export default function MasterData() {
 
         const { data: existingMapel } = await supabase.from("mata_pelajaran").select("id, nama").eq("jurusan_id", jurusanId);
         const existingNames = new Set((existingMapel ?? []).map((m) => m.nama));
+        const lastCol = subjectColumns[subjectColumns.length - 1];
         const newMapel = subjectColumns.filter((sc) => !existingNames.has(sc.name))
-          .map((sc) => ({ nama: sc.name, jurusan_id: jurusanId }));
+          .map((sc) => ({
+            nama: sc.name,
+            jurusan_id: jurusanId,
+            dipakai_klaster: isFeatureMapel(sheetName, sc.name, sc.idx === lastCol.idx),
+          }));
+
         if (newMapel.length > 0) await insertBatched("mata_pelajaran", newMapel);
         const { data: allMapelForJurusan } = await supabase.from("mata_pelajaran").select("id, nama").eq("jurusan_id", jurusanId);
         const mapelMap = new Map((allMapelForJurusan ?? []).map((m) => [m.nama, m.id]));

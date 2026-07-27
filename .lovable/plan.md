@@ -1,60 +1,48 @@
+## Tujuan
 
-## 1. Filter Tahun di Master Data
+Menyesuaikan sistem dengan file perhitungan manual terbaru: data dipisah per **kelas + jurusan** (14 kelompok), dinormalisasi Min-Max dulu, baru K-Means (K=3).
 
-- Tambah dropdown "Tahun" di halaman Master Data (di atas tab Siswa/Nilai/Mapel/Jurusan).
-- Opsi diisi otomatis dari `DISTINCT EXTRACT(YEAR FROM created_at)` pada tabel `siswa` (+ opsi "Semua Tahun").
-- Filter diterapkan ke query list Siswa dan Nilai (nilai difilter via join siswa) menggunakan `.gte('created_at', 'YYYY-01-01').lt(...)`.
-- Default: tahun terbaru yang tersedia.
+## Temuan dari file Excel
 
-## 2. Role Admin
+- `SEBELUM DI LAKUKAN PERHITUNGAN_KLS 10&11.xlsx` punya **14 sheet** = 14 kelompok (KLS 10 DKV, DPIB, TESHA, TJKT, TKP, TKR 1, TKR 2, dan 7 sheet KLS 11).
+- Header data mulai baris ke-3: `No | NAMA PESERTA DIDIK | NISN | <daftar mapel>`. Nilai kosong ditulis `-`.
+- Di `NEW_DATA_10_11-2.xlsx`, hanya sebagian mapel dipakai sebagai fitur (blok "NILAI SETELAH DI NORMALISASI PAKAI MIN-MAX"):
+  - KLS 10: Koding, Bahasa Inggris, Matematika, Projek IPAS, Informatika, Dasar-Dasar Kejuruan (6 fitur)
+  - KLS 11: Kreativitas/Inovasi (KIK) + Mapel Kejuruan (2 fitur)
+- Normalisasi Min-Max **per kolom, per kelompok**: `(x - min) / (max - min)`.
+- Jarak memakai **Euclidean kuadrat** (tanpa akar) — urutan klaster sama, tetap saya samakan.
+- Label diambil dari rata-rata **nilai asli** tiap klaster: tertinggi = Tinggi, tengah = Sedang, terendah = Rendah.
 
-Database:
-- Tambah nilai `'admin'` sudah ada di enum `app_role` (sudah ada).
-- Migrasi: INSERT role `admin` ke `user_roles` untuk user dengan email `marchellino940@gmail.com` (lookup via `auth.users`).
-- Jika email belum terdaftar, migrasi akan gagal aman — user diminta signup dulu lewat halaman Auth, lalu jalankan grant.
+## Perubahan yang akan dibuat
 
-Karena akun admin belum tentu ada, alur:
-1. User signup `marchellino940@gmail.com` di halaman `/auth` (password apapun).
-2. Jalankan migrasi yang: hapus role `guru` default untuk email tsb (jika ada) & INSERT role `admin`.
+### 1. Data & struktur
 
-## 3. Gate Menu & Akses Master Data
+- Hapus seluruh data lama (`hasil_klaster`, `nilai`, `siswa`, `mata_pelajaran`, `jurusan`).
+- Setiap sheet menjadi satu baris `jurusan` (mis. "KLS 10 DKV") sehingga kelompok tidak lagi digabung.
+- Tambah kolom `dipakai_klaster boolean default false` di `mata_pelajaran`, dicentang hanya untuk mapel fitur sesuai daftar di atas (mapping nama mapel per kelas 10/11 ditanam di kode import).
+- Data dari file Excel yang Anda kirim di-import langsung ke database (bukan Anda upload manual), sehingga isi Master Data langsung sesuai.
 
-Sidebar (`AppSidebar.tsx`):
-- Fetch role user via `user_roles`.
-- Admin: lihat semua menu + menu baru "Kelola Guru" & "Permintaan Akses".
-- Guru: Dashboard, Klasterisasi, Profil. Master Data ditampilkan HANYA jika ada row aktif di `master_data_access` (lihat bawah).
+### 2. Mesin perhitungan (`src/lib/kmeans.ts` + file baru `src/lib/normalize.ts`)
 
-Route guard (`ProtectedRoute` diperluas jadi `RoleRoute`):
-- `/master-data`: butuh admin ATAU guru dengan izin aktif.
-- `/admin/*`: butuh admin.
+- Fungsi `minMaxNormalize(matrix)` — per kolom; jika `max == min`, hasil 0.
+- `kMeans` diubah: pakai jarak Euclidean kuadrat, iterasi sampai assignment tidak berubah (maks 100).
+- Centroid awal deterministik: siswa dengan rata-rata normalisasi **tertinggi / tengah / terendah** (reproducible, tidak acak). Bisa saya ganti kalau Anda punya aturan pasti dari Excel.
 
-## 4. Request & Approve Akses Master Data
+### 3. Halaman Klasterisasi (`src/pages/Clustering.tsx`)
 
-Tabel baru `master_data_access_requests`:
-- `user_id` (guru), `status` ('pending'|'approved'|'rejected'), `requested_at`, `reviewed_at`, `reviewed_by`.
-- RLS:
-  - Guru: SELECT & INSERT row miliknya sendiri.
-  - Admin: SELECT semua, UPDATE status.
-- Fungsi helper `has_master_data_access(uid)` = admin OR ada request approved untuk uid.
-- RLS tabel `siswa/nilai/mapel/jurusan` diubah dari `has_role('guru')` → `has_master_data_access(auth.uid())` supaya guru approved bisa CRUD.
+- Hapus `expectedClusters.ts` (hasil hardcode lama) dan blok `PRESET` centroid lama.
+- Alur baru per kelompok: ambil siswa + nilai mapel bertanda `dipakai_klaster` → normalisasi Min-Max → K-Means (K=3) → simpan klaster.
+- Penamaan Tinggi/Sedang/Rendah dihitung dari rata-rata nilai asli tiap klaster (bukan nomor klaster tetap).
+- Tabel hasil ditampilkan terpisah per kelompok, dengan kolom nilai asli + nilai normalisasi (bisa di-toggle) + klaster + keterangan.
+- Export Excel: satu sheet per kelompok, berisi nilai asli, nilai normalisasi, klaster, keterangan.
 
-Halaman baru:
-- **`/admin/guru`** (Admin): list semua guru dari `profiles` + role, dengan status akses Master Data (approved/pending/none) — informasi saja.
-- **`/admin/requests`** (Admin): tabel permintaan pending, tombol Approve / Reject.
-- **Banner di Dashboard untuk Guru tanpa akses**: tombol "Minta Akses Master Data" → insert request pending. Jika sudah pending, tampilkan status.
+### 4. Master Data (`src/pages/MasterData.tsx`)
 
-## Ringkasan file yang berubah/baru
+- Importer diperbarui untuk format multi-sheet baru (header di baris 3, `-` = kosong, nama sheet = jurusan/kelompok).
+- Tab Mata Pelajaran menampilkan penanda "dipakai untuk klasterisasi".
 
-- Migrasi SQL: tabel `master_data_access_requests` + grants + RLS + function + update RLS 4 tabel + grant admin ke marchellino940@gmail.com.
-- `src/hooks/useUserRole.tsx` (baru): return `{ role, hasMasterDataAccess, loading }`.
-- `src/components/AppSidebar.tsx`: menu dinamis per role.
-- `src/components/ProtectedRoute.tsx` atau `RoleRoute.tsx`: prop `requireRole` / `requireMasterDataAccess`.
-- `src/pages/MasterData.tsx`: dropdown filter tahun.
-- `src/pages/AdminGuru.tsx` & `src/pages/AdminRequests.tsx` (baru).
-- `src/pages/Dashboard.tsx`: banner request akses untuk guru tanpa izin.
-- `src/App.tsx`: route `/admin/guru`, `/admin/requests`.
+## Catatan teknis
 
-## Catatan
-
-- Password akun admin tidak disimpan — Anda signup manual di `/auth`, lalu migrasi mempromosikan akun tsb jadi admin.
-- Filter tahun pakai `created_at` sesuai pilihan Anda; kalau nanti butuh "tahun ajaran" (mis. 2024/2025) bisa ditambah kolom terpisah.
+- Migrasi database diperlukan untuk kolom `dipakai_klaster`; penghapusan + pengisian data lewat operasi data biasa.
+- Total ± 14 kelompok, ratusan siswa; import dilakukan bertahap (batch) agar tidak kena limit.
+- Hasil website akan identik dengan Excel selama daftar mapel fitur dan K sama; kalau ada selisih karena centroid awal, saya sesuaikan setelah pengujian pertama.

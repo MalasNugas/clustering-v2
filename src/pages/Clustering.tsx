@@ -1,18 +1,20 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Play, RotateCcw, Download } from "lucide-react";
 import { toast } from "sonner";
 import { kMeans, DataPoint } from "@/lib/kmeans";
-import { EXPECTED_CLUSTERS } from "@/lib/expectedClusters";
+import { minMaxNormalize } from "@/lib/normalize";
 import * as XLSX from "xlsx";
+
+const K = 3;
 
 const clusterColors = [
   "bg-primary text-primary-foreground",
@@ -22,18 +24,14 @@ const clusterColors = [
   "bg-secondary text-secondary-foreground",
 ];
 
-const clusterLabels: Record<number, string> = {
-  1: "Tinggi",
-  2: "Sedang",
-  3: "Rendah",
-};
+const clusterLabels: Record<number, string> = { 1: "Tinggi", 2: "Sedang", 3: "Rendah" };
 
 export default function Clustering() {
   const queryClient = useQueryClient();
-  const [k, setK] = useState(3);
   const [running, setRunning] = useState(false);
-  const [iterationInfo, setIterationInfo] = useState<{ jurusan: string; iters: number }[]>([]);
   const [klasterFilter, setKlasterFilter] = useState<string>("all");
+  const [kelompokFilter, setKelompokFilter] = useState<string>("all");
+  const [showNormalized, setShowNormalized] = useState(false);
 
   const { data: jurusan = [] } = useQuery({
     queryKey: ["jurusan"],
@@ -62,15 +60,11 @@ export default function Clustering() {
   const { data: nilai = [] } = useQuery({
     queryKey: ["nilai"],
     queryFn: async () => {
-      // Supabase default limit is 1000; fetch all in batches
       const pageSize = 1000;
       let from = 0;
       const all: any[] = [];
       while (true) {
-        const { data, error } = await supabase
-          .from("nilai")
-          .select("*")
-          .range(from, from + pageSize - 1);
+        const { data, error } = await supabase.from("nilai").select("*").range(from, from + pageSize - 1);
         if (error) throw error;
         if (!data || data.length === 0) break;
         all.push(...data);
@@ -89,102 +83,83 @@ export default function Clustering() {
     },
   });
 
+  // nilai per siswa
+  const nilaiBySiswa = useMemo(() => {
+    const m = new Map<string, Record<string, number>>();
+    for (const n of nilai as any[]) {
+      if (!m.has(n.siswa_id)) m.set(n.siswa_id, {});
+      m.get(n.siswa_id)![n.mata_pelajaran_id] = Number(n.nilai);
+    }
+    return m;
+  }, [nilai]);
+
+  // Fitur (mapel yang dipakai) per kelompok
+  const featureMapel = (jurusanId: string) =>
+    (mapel as any[]).filter((m) => m.jurusan_id === jurusanId && m.dipakai_klaster);
+
+  const groupData = (jurusanId: string) => {
+    const jSiswa = (siswa as any[]).filter((s) => s.jurusan_id === jurusanId);
+    const feats = featureMapel(jurusanId);
+    const raw = jSiswa.map((s) => feats.map((m) => nilaiBySiswa.get(s.id)?.[m.id] ?? 0));
+    const normalized = minMaxNormalize(raw);
+    return { jSiswa, feats, raw, normalized };
+  };
+
   const runClustering = async () => {
     if (siswa.length === 0 || mapel.length === 0 || nilai.length === 0) {
       toast.error("Data belum lengkap. Silakan import data terlebih dahulu.");
       return;
     }
     setRunning(true);
-
     try {
       await supabase.from("hasil_klaster").delete().neq("id", "00000000-0000-0000-0000-000000000000");
 
-      const iterInfo: { jurusan: string; iters: number }[] = [];
       const allInsert: { siswa_id: string; klaster: number; iterasi: number; jurusan_id: string }[] = [];
+      let processed = 0;
 
-      // Preset to reproduce the reference Excel result
-      const PRESET: Record<string, { mapelOrder: string[]; centroids: number[][] }> = {
-        "KELAS 10": {
-          mapelOrder: ["KODING", "BI", "MTK", "INFOR", "KEJU"],
-          centroids: [
-            [76, 73, 75, 79, 89],
-            [80, 74, 70, 75, 75],
-            [91, 85, 78, 83, 80],
-          ],
-        },
-        "KELAS 11": {
-          mapelOrder: ["INFOR", "KIK", "KEJU"],
-          centroids: [
-            [71, 80, 89],
-            [83, 80, 90],
-            [92, 80, 91],
-          ],
-        },
-      };
-
-      // Run K-Means per jurusan
+      // Perhitungan dilakukan TERPISAH untuk setiap kelas + jurusan
       for (const j of jurusan as any[]) {
-        const jSiswa = (siswa as any[]).filter((s) => s.jurusan_id === j.id);
-        const jMapel = (mapel as any[]).filter((m) => m.jurusan_id === j.id);
-        if (jSiswa.length < k || jMapel.length === 0) continue;
+        const { jSiswa, feats, raw, normalized } = groupData(j.id);
+        if (jSiswa.length < K || feats.length === 0) continue;
 
-        const preset = PRESET[j.nama];
-        let sortedMapel: any[];
-        if (preset) {
-          sortedMapel = preset.mapelOrder
-            .map((nm) => jMapel.find((m: any) => m.nama === nm))
-            .filter(Boolean);
-          // Append any leftover mapel not in preset
-          for (const m of jMapel) if (!sortedMapel.includes(m)) sortedMapel.push(m);
-        } else {
-          sortedMapel = [...jMapel].sort((a: any, b: any) => a.nama.localeCompare(b.nama));
+        const dataPoints: DataPoint[] = jSiswa.map((s: any, i: number) => ({
+          id: s.id,
+          values: normalized[i],
+        }));
+
+        const { results, iterations } = kMeans(dataPoints, K, 100);
+
+        // Penamaan klaster: rata-rata nilai ASLI tertinggi = Klaster 1 (Tinggi)
+        const avgByCluster = new Map<number, number>();
+        for (let c = 1; c <= K; c++) {
+          const idxs = results.map((r, i) => (r.cluster === c ? i : -1)).filter((i) => i >= 0);
+          if (idxs.length === 0) continue;
+          const avg =
+            idxs.reduce((s, i) => s + raw[i].reduce((a, b) => a + b, 0) / (raw[i].length || 1), 0) /
+            idxs.length;
+          avgByCluster.set(c, avg);
         }
-
-        const dataPoints: DataPoint[] = jSiswa.map((s: any) => {
-          const scores = sortedMapel.map((m: any) => {
-            const n = (nilai as any[]).find(
-              (v) => v.siswa_id === s.id && v.mata_pelajaran_id === m.id
-            );
-            return n ? Number(n.nilai) : 0;
-          });
-          return { id: s.id, values: scores };
-        });
-
-        const initialCentroids =
-          preset && preset.centroids.length === k ? preset.centroids : undefined;
-
-        const { results, iterations } = kMeans(dataPoints, k, 100, initialCentroids);
-        iterInfo.push({ jurusan: j.nama, iters: iterations });
-
-        // Override with reference Excel results when available
-        const expected = EXPECTED_CLUSTERS[j.nama];
-        const nameToCluster = new Map<string, number>();
-        if (expected) {
-          for (const s of jSiswa as any[]) {
-            const cl = expected[(s.nama ?? "").trim()];
-            if (cl) nameToCluster.set(s.id, cl);
-          }
-        }
+        const ranked = Array.from(avgByCluster.entries()).sort((a, b) => b[1] - a[1]);
+        const remap = new Map<number, number>();
+        ranked.forEach(([c], i) => remap.set(c, i + 1));
 
         for (const r of results) {
-          const siswaItem = (jSiswa as any[]).find((s) => s.id === r.id);
-          const overridden = siswaItem ? nameToCluster.get(r.id) : undefined;
           allInsert.push({
             siswa_id: r.id,
-            klaster: overridden ?? r.cluster,
+            klaster: remap.get(r.cluster) ?? r.cluster,
             iterasi: iterations,
             jurusan_id: j.id,
           });
         }
+        processed++;
       }
 
-      if (allInsert.length > 0) {
-        const { error } = await supabase.from("hasil_klaster").insert(allInsert);
+      for (let i = 0; i < allInsert.length; i += 500) {
+        const { error } = await supabase.from("hasil_klaster").insert(allInsert.slice(i, i + 500));
         if (error) throw error;
       }
 
-      setIterationInfo(iterInfo);
-      toast.success(`Klasterisasi selesai untuk ${iterInfo.length} kelas!`);
+      toast.success(`Klasterisasi selesai untuk ${processed} kelompok kelas!`);
       refetchHasil();
       queryClient.invalidateQueries({ queryKey: ["hasil-klaster"] });
     } catch (err: any) {
@@ -196,10 +171,11 @@ export default function Clustering() {
 
   const handleReset = async () => {
     await supabase.from("hasil_klaster").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-    setIterationInfo([]);
     refetchHasil();
     toast.success("Hasil klasterisasi direset");
   };
+
+  const klasterMap = new Map((hasilKlaster as any[]).map((h) => [h.siswa_id, h.klaster]));
 
   const handleExport = () => {
     if ((hasilKlaster as any[]).length === 0) {
@@ -207,27 +183,26 @@ export default function Clustering() {
       return;
     }
     const wb = XLSX.utils.book_new();
-    const klMap = new Map((hasilKlaster as any[]).map((h) => [h.siswa_id, h.klaster]));
-    const nilaiMap = new Map<string, Record<string, number>>();
-    for (const n of nilai as any[]) {
-      if (!nilaiMap.has(n.siswa_id)) nilaiMap.set(n.siswa_id, {});
-      nilaiMap.get(n.siswa_id)![n.mata_pelajaran_id] = Number(n.nilai);
-    }
     for (const j of jurusan as any[]) {
-      const jSiswa = (siswa as any[]).filter((s) => s.jurusan_id === j.id);
-      if (jSiswa.length === 0) continue;
-      const jMapel = (mapel as any[])
-        .filter((m) => m.jurusan_id === j.id)
-        .sort((a, b) => a.nama.localeCompare(b.nama));
-      const header = ["No", "Nama", "Kelas", ...jMapel.map((m) => m.nama), "Klaster", "Keterangan"];
+      const { jSiswa, feats, raw, normalized } = groupData(j.id);
+      if (jSiswa.length === 0 || feats.length === 0) continue;
+      const header = [
+        "No",
+        "Nama",
+        "Kelas",
+        ...feats.map((m: any) => m.nama),
+        ...feats.map((m: any) => `${m.nama} (Norm)`),
+        "Klaster",
+        "Keterangan",
+      ];
       const rows = jSiswa.map((s: any, i: number) => {
-        const cl = klMap.get(s.id);
-        const sn = nilaiMap.get(s.id) ?? {};
+        const cl = klasterMap.get(s.id);
         return [
           i + 1,
           s.nama,
           j.nama,
-          ...jMapel.map((m) => (sn[m.id] != null ? sn[m.id] : "")),
+          ...raw[i],
+          ...normalized[i].map((v) => Number(v.toFixed(4))),
           cl ?? "",
           cl ? clusterLabels[cl as number] ?? "" : "",
         ];
@@ -239,77 +214,75 @@ export default function Clustering() {
     toast.success("Berhasil mengekspor hasil klasterisasi");
   };
 
-  const klasterMap = new Map((hasilKlaster as any[]).map((h) => [h.siswa_id, h.klaster]));
-
-  const clusterSummary = Array.from({ length: k }, (_, i) => {
-    const members = (hasilKlaster as any[]).filter((h) => h.klaster === i + 1);
-    return { cluster: i + 1, count: members.length, label: clusterLabels[i + 1] ?? `K${i + 1}` };
-  });
-
-  // Group siswa by jurusan for display
-  const siswaByJurusan = (jurusan as any[]).map((j) => ({
-    jurusan: j,
-    siswa: (siswa as any[]).filter((s) => s.jurusan_id === j.id),
+  const clusterSummary = Array.from({ length: K }, (_, i) => ({
+    cluster: i + 1,
+    count: (hasilKlaster as any[]).filter((h) => h.klaster === i + 1).length,
+    label: clusterLabels[i + 1] ?? `K${i + 1}`,
   }));
+
+  const visibleJurusan = (jurusan as any[]).filter(
+    (j) => kelompokFilter === "all" || j.id === kelompokFilter
+  );
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-6">Klasterisasi K-Means</h2>
+      <h2 className="text-2xl font-bold mb-1">Klasterisasi K-Means</h2>
+      <p className="text-sm text-muted-foreground mb-6">
+        Alur: normalisasi Min-Max per mata pelajaran → K-Means (K={K}), dihitung terpisah untuk setiap
+        kelas &amp; jurusan.
+      </p>
 
       <Card className="shadow-sm mb-6">
         <CardHeader>
           <CardTitle className="text-base">Konfigurasi</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col sm:flex-row gap-4 items-end">
-            <div className="space-y-1.5">
-              <Label htmlFor="k-value">Jumlah Klaster (K)</Label>
-              <Input
-                id="k-value"
-                type="number"
-                min={2}
-                max={10}
-                value={k}
-                onChange={(e) => setK(Number(e.target.value))}
-                className="w-24"
-              />
-            </div>
+          <div className="flex flex-wrap gap-4 items-end">
             <Button onClick={runClustering} disabled={running}>
               <Play className="mr-2 h-4 w-4" />
               {running ? "Memproses..." : "Jalankan K-Means"}
             </Button>
             {(hasilKlaster as any[]).length > 0 && (
-              <Button variant="outline" onClick={handleReset}>
-                <RotateCcw className="mr-2 h-4 w-4" />
-                Reset
-              </Button>
-            )}
-            {(hasilKlaster as any[]).length > 0 && (
-              <Button variant="secondary" onClick={handleExport}>
-                <Download className="mr-2 h-4 w-4" />
-                Export Excel
-              </Button>
-            )}
-            {(hasilKlaster as any[]).length > 0 && (
-              <div className="space-y-1.5">
-                <Label>Filter Klaster</Label>
-                <Select value={klasterFilter} onValueChange={setKlasterFilter}>
-                  <SelectTrigger className="w-44">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Semua Klaster</SelectItem>
-                    <SelectItem value="1">Klaster 1 — Tinggi</SelectItem>
-                    <SelectItem value="2">Klaster 2 — Sedang</SelectItem>
-                    <SelectItem value="3">Klaster 3 — Rendah</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <>
+                <Button variant="outline" onClick={handleReset}>
+                  <RotateCcw className="mr-2 h-4 w-4" /> Reset
+                </Button>
+                <Button variant="secondary" onClick={handleExport}>
+                  <Download className="mr-2 h-4 w-4" /> Export Excel
+                </Button>
+                <div className="space-y-1.5">
+                  <Label>Kelompok Kelas</Label>
+                  <Select value={kelompokFilter} onValueChange={setKelompokFilter}>
+                    <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Semua Kelompok</SelectItem>
+                      {(jurusan as any[]).map((j) => (
+                        <SelectItem key={j.id} value={j.id}>{j.nama}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Filter Klaster</Label>
+                  <Select value={klasterFilter} onValueChange={setKlasterFilter}>
+                    <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Semua Klaster</SelectItem>
+                      <SelectItem value="1">Klaster 1 — Tinggi</SelectItem>
+                      <SelectItem value="2">Klaster 2 — Sedang</SelectItem>
+                      <SelectItem value="3">Klaster 3 — Rendah</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2 pb-2">
+                  <Switch id="norm" checked={showNormalized} onCheckedChange={setShowNormalized} />
+                  <Label htmlFor="norm">Tampilkan nilai normalisasi</Label>
+                </div>
+              </>
             )}
           </div>
         </CardContent>
       </Card>
-
 
       {(hasilKlaster as any[]).length > 0 && (
         <>
@@ -333,20 +306,27 @@ export default function Clustering() {
             ))}
           </div>
 
-          {siswaByJurusan.map(({ jurusan: j, siswa: jSiswa }) => {
-            if (jSiswa.length === 0) return null;
-            const jMapel = (mapel as any[])
-              .filter((m) => m.jurusan_id === j.id)
-              .sort((a, b) => a.nama.localeCompare(b.nama));
-            const nilaiBySiswa = new Map<string, Record<string, number>>();
-            for (const n of nilai as any[]) {
-              if (!nilaiBySiswa.has(n.siswa_id)) nilaiBySiswa.set(n.siswa_id, {});
-              nilaiBySiswa.get(n.siswa_id)![n.mata_pelajaran_id] = Number(n.nilai);
-            }
+          {visibleJurusan.map((j) => {
+            const { jSiswa, feats, raw, normalized } = groupData(j.id);
+            if (jSiswa.length === 0 || feats.length === 0) return null;
+            const rows = jSiswa
+              .map((s: any, i: number) => ({ s, raw: raw[i], norm: normalized[i] }))
+              .filter((r) => klasterFilter === "all" || klasterMap.get(r.s.id) === Number(klasterFilter))
+              .sort((a, b) => {
+                const ca = klasterMap.get(a.s.id) ?? 999;
+                const cb = klasterMap.get(b.s.id) ?? 999;
+                if (ca !== cb) return ca - cb;
+                return (a.s.nama ?? "").localeCompare(b.s.nama ?? "");
+              });
+            if (rows.length === 0) return null;
+
             return (
               <Card key={j.id} className="shadow-sm mb-6">
                 <CardHeader>
                   <CardTitle className="text-base">Hasil Klasterisasi — {j.nama}</CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    Variabel: {feats.map((m: any) => m.nama).join(", ")}
+                  </p>
                 </CardHeader>
                 <CardContent>
                   <div className="overflow-auto max-h-[500px]">
@@ -355,36 +335,22 @@ export default function Clustering() {
                         <TableRow>
                           <TableHead className="w-12">No</TableHead>
                           <TableHead>Nama</TableHead>
-                          <TableHead>Kelas</TableHead>
-                          {jMapel.map((m) => (
+                          {feats.map((m: any) => (
                             <TableHead key={m.id} className="text-center">{m.nama}</TableHead>
                           ))}
                           <TableHead className="text-right sticky right-0 bg-background">Klaster</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {[...jSiswa]
-                          .filter((s: any) => {
-                            if (klasterFilter === "all") return true;
-                            return klasterMap.get(s.id) === Number(klasterFilter);
-                          })
-                          .sort((a: any, b: any) => {
-                            const ca = klasterMap.get(a.id) ?? 999;
-                            const cb = klasterMap.get(b.id) ?? 999;
-                            if (ca !== cb) return ca - cb;
-                            return (a.nama ?? "").localeCompare(b.nama ?? "");
-                          })
-                          .map((s: any, i: number) => {
-                          const cl = klasterMap.get(s.id);
-                          const sNilai = nilaiBySiswa.get(s.id) ?? {};
+                        {rows.map((r, i) => {
+                          const cl = klasterMap.get(r.s.id);
                           return (
-                            <TableRow key={s.id}>
+                            <TableRow key={r.s.id}>
                               <TableCell>{i + 1}</TableCell>
-                              <TableCell className="font-medium">{s.nama}</TableCell>
-                              <TableCell>{s.jurusan?.nama ?? j.nama}</TableCell>
-                              {jMapel.map((m) => (
+                              <TableCell className="font-medium">{r.s.nama}</TableCell>
+                              {feats.map((m: any, ci: number) => (
                                 <TableCell key={m.id} className="text-center">
-                                  {sNilai[m.id] != null ? sNilai[m.id] : "-"}
+                                  {showNormalized ? r.norm[ci].toFixed(3) : r.raw[ci]}
                                 </TableCell>
                               ))}
                               <TableCell className="text-right sticky right-0 bg-background">
