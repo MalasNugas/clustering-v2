@@ -362,11 +362,26 @@ export default function MasterData() {
     }) as Siswa[];
   }, [siswa, search, filterJurusan, filterYear]);
 
-  // mapel columns shown depend on filter — if specific jurusan, show only that jurusan's mapel
+  // kolom mapel: gabungkan nama duplikat lintas jurusan, dan hanya tampilkan
+  // mapel yang punya nilai pada siswa yang sedang tampil
   const visibleMapel = useMemo(() => {
-    if (filterJurusan !== "all") return mapelByJurusan.get(filterJurusan) ?? [];
-    return mapel;
-  }, [filterJurusan, mapel, mapelByJurusan]);
+    const source = filterJurusan !== "all" ? (mapelByJurusan.get(filterJurusan) ?? []) : mapel;
+    const byName = new Map<string, { key: string; nama: string; ids: string[] }>();
+    for (const mp of source) {
+      const key = mp.nama.trim().toLowerCase();
+      if (!byName.has(key)) byName.set(key, { key, nama: mp.nama.trim(), ids: [] });
+      byName.get(key)!.ids.push(mp.id);
+    }
+    const cols = Array.from(byName.values()).filter((col) =>
+      filteredSiswa.some((s) => {
+        const sn = nilaiBySiswa.get(s.id);
+        return sn ? col.ids.some((id) => sn[id] != null) : false;
+      })
+    );
+    cols.sort((a, b) => a.nama.localeCompare(b.nama));
+    return cols;
+  }, [filterJurusan, mapel, mapelByJurusan, filteredSiswa, nilaiBySiswa]);
+
 
   const formMapel = formJurusan ? (mapelByJurusan.get(formJurusan) ?? []) : [];
 
