@@ -186,8 +186,14 @@ export default function MasterData() {
 
         const { data: existingMapel } = await supabase.from("mata_pelajaran").select("id, nama").eq("jurusan_id", jurusanId);
         const existingNames = new Set((existingMapel ?? []).map((m) => m.nama));
+        const lastCol = subjectColumns[subjectColumns.length - 1];
         const newMapel = subjectColumns.filter((sc) => !existingNames.has(sc.name))
-          .map((sc) => ({ nama: sc.name, jurusan_id: jurusanId }));
+          .map((sc) => ({
+            nama: sc.name,
+            jurusan_id: jurusanId,
+            dipakai_klaster: isFeatureMapel(sheetName, sc.name, sc.idx === lastCol.idx),
+          }));
+
         if (newMapel.length > 0) await insertBatched("mata_pelajaran", newMapel);
         const { data: allMapelForJurusan } = await supabase.from("mata_pelajaran").select("id, nama").eq("jurusan_id", jurusanId);
         const mapelMap = new Map((allMapelForJurusan ?? []).map((m) => [m.nama, m.id]));
