@@ -1,0 +1,1 @@
+ALTER TABLE public.mata_pelajaran ADD COLUMN IF NOT EXISTS dipakai_klaster boolean NOT NULL DEFAULT false;
