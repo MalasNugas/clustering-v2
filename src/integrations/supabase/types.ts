@@ -20,7 +20,9 @@ export type Database = {
           id: string
           iterasi: number
           jurusan_id: string | null
+          k_used: number | null
           klaster: number
+          label: string | null
           siswa_id: string
         }
         Insert: {
@@ -28,7 +30,9 @@ export type Database = {
           id?: string
           iterasi?: number
           jurusan_id?: string | null
+          k_used?: number | null
           klaster: number
+          label?: string | null
           siswa_id: string
         }
         Update: {
@@ -36,7 +40,9 @@ export type Database = {
           id?: string
           iterasi?: number
           jurusan_id?: string | null
+          k_used?: number | null
           klaster?: number
+          label?: string | null
           siswa_id?: string
         }
         Relationships: [
