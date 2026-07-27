@@ -1,48 +1,48 @@
 ## Tujuan
 
-Menyesuaikan sistem dengan file perhitungan manual terbaru: data dipisah per **kelas + jurusan** (14 kelompok), dinormalisasi Min-Max dulu, baru K-Means (K=3).
+Melengkapi alur perhitungan agar sama dengan file `DATA_10_11_LENGKAP.xlsx`:
+raw data → normalisasi Min-Max → K-Means → **penentuan K optimal dengan Elbow Method** → penamaan label sesuai `PENAMAAN_LABEL.docx`.
 
-## Temuan dari file Excel
+## Temuan dari file yang dikirim
 
-- `SEBELUM DI LAKUKAN PERHITUNGAN_KLS 10&11.xlsx` punya **14 sheet** = 14 kelompok (KLS 10 DKV, DPIB, TESHA, TJKT, TKP, TKR 1, TKR 2, dan 7 sheet KLS 11).
-- Header data mulai baris ke-3: `No | NAMA PESERTA DIDIK | NISN | <daftar mapel>`. Nilai kosong ditulis `-`.
-- Di `NEW_DATA_10_11-2.xlsx`, hanya sebagian mapel dipakai sebagai fitur (blok "NILAI SETELAH DI NORMALISASI PAKAI MIN-MAX"):
-  - KLS 10: Koding, Bahasa Inggris, Matematika, Projek IPAS, Informatika, Dasar-Dasar Kejuruan (6 fitur)
-  - KLS 11: Kreativitas/Inovasi (KIK) + Mapel Kejuruan (2 fitur)
-- Normalisasi Min-Max **per kolom, per kelompok**: `(x - min) / (max - min)`.
-- Jarak memakai **Euclidean kuadrat** (tanpa akar) — urutan klaster sama, tetap saya samakan.
-- Label diambil dari rata-rata **nilai asli** tiap klaster: tertinggi = Tinggi, tengah = Sedang, terendah = Rendah.
+- 14 sheet (kelompok kelas + jurusan) — sama seperti dataset yang sudah ada di Master Data.
+- Setiap sheet menghitung WCSS untuk K=1 sampai K=6, lalu tabel "PENGUJIAN METODE" berisi %Penurunan antar K dan penanda K terpilih.
+- K optimal hasil manual per kelompok:
+  - KLS 10: DKV=4, DPIB=3, TESHA=3, TJKT=3, TKP=2, TKR 1=3, TKR 2=3
+  - KLS 11: DKV=3, DPIB=4, TESHA=3, TJKT=4, TKP=2, TKR 1=5, TKR 2=3
+- `PENAMAAN_LABEL.docx` memberi nama klaster per nilai K, dengan skala label: SANGAT RENDAH, RENDAH, CUKUP RENDAH, SEDANG, CUKUP TINGGI, TINGGI, SANGAT TINGGI (urutan tergantung rata-rata nilai tiap klaster).
 
 ## Perubahan yang akan dibuat
 
-### 1. Data & struktur
+### 1. Perhitungan (`src/lib/kmeans.ts`, file baru `src/lib/elbow.ts`)
 
-- Hapus seluruh data lama (`hasil_klaster`, `nilai`, `siswa`, `mata_pelajaran`, `jurusan`).
-- Setiap sheet menjadi satu baris `jurusan` (mis. "KLS 10 DKV") sehingga kelompok tidak lagi digabung.
-- Tambah kolom `dipakai_klaster boolean default false` di `mata_pelajaran`, dicentang hanya untuk mapel fitur sesuai daftar di atas (mapping nama mapel per kelas 10/11 ditanam di kode import).
-- Data dari file Excel yang Anda kirim di-import langsung ke database (bukan Anda upload manual), sehingga isi Master Data langsung sesuai.
+- Tambah fungsi `computeWCSS(dataPoints, assignments, centroids)` — jumlah jarak Euclidean kuadrat tiap titik ke centroidnya.
+- `runElbow(dataPoints, kMax = 6)` → menghasilkan array `{ k, wcss }` untuk K=1..6 plus `%penurunan` antar K, dan `optimalK` (K dengan titik siku / penurunan signifikan terakhir sebelum melandai).
+- K-Means tetap: Min-Max dulu, jarak Euclidean kuadrat, centroid awal deterministik.
 
-### 2. Mesin perhitungan (`src/lib/kmeans.ts` + file baru `src/lib/normalize.ts`)
+### 2. Penamaan label (file baru `src/lib/labels.ts`)
 
-- Fungsi `minMaxNormalize(matrix)` — per kolom; jika `max == min`, hasil 0.
-- `kMeans` diubah: pakai jarak Euclidean kuadrat, iterasi sampai assignment tidak berubah (maks 100).
-- Centroid awal deterministik: siswa dengan rata-rata normalisasi **tertinggi / tengah / terendah** (reproducible, tidak acak). Bisa saya ganti kalau Anda punya aturan pasti dari Excel.
+- Klaster diurutkan dari rata-rata nilai asli tertinggi → terendah, lalu diberi nama sesuai jumlah K:
+  - K=1: Tinggi
+  - K=2: Tinggi, Rendah
+  - K=3: Tinggi, Sedang, Rendah
+  - K=4: Sangat Tinggi, Tinggi, Sedang, Rendah
+  - K=5: Sangat Tinggi, Tinggi, Sedang, Rendah, Sangat Rendah
+  - K=6: Sangat Tinggi, Cukup Tinggi, Tinggi, Rendah, Cukup Rendah, Sangat Rendah
 
 ### 3. Halaman Klasterisasi (`src/pages/Clustering.tsx`)
 
-- Hapus `expectedClusters.ts` (hasil hardcode lama) dan blok `PRESET` centroid lama.
-- Alur baru per kelompok: ambil siswa + nilai mapel bertanda `dipakai_klaster` → normalisasi Min-Max → K-Means (K=3) → simpan klaster.
-- Penamaan Tinggi/Sedang/Rendah dihitung dari rata-rata nilai asli tiap klaster (bukan nomor klaster tetap).
-- Tabel hasil ditampilkan terpisah per kelompok, dengan kolom nilai asli + nilai normalisasi (bisa di-toggle) + klaster + keterangan.
-- Export Excel: satu sheet per kelompok, berisi nilai asli, nilai normalisasi, klaster, keterangan.
+- Bagian baru **"Pengujian Elbow Method"** per kelompok: tabel WCSS K=1..6, %Penurunan tiap perubahan K, dan grafik garis WCSS (recharts) dengan titik siku ditandai.
+- K yang dipakai tiap kelompok ditentukan otomatis dari Elbow, tetapi bisa **diubah manual per kelompok** (dropdown K=2..6); nilai awal disetel ke K hasil perhitungan manual di atas agar hasil website langsung sama dengan Excel.
+- Ringkasan klaster dan tabel hasil mengikuti K masing-masing kelompok (tidak lagi tetap 3), dengan nama label dari `labels.ts`.
+- Export Excel: tambah sheet/blok "Pengujian Elbow" berisi WCSS dan %penurunan per kelompok, selain sheet hasil klaster.
 
-### 4. Master Data (`src/pages/MasterData.tsx`)
+### 4. Penyimpanan hasil
 
-- Importer diperbarui untuk format multi-sheet baru (header di baris 3, `-` = kosong, nama sheet = jurusan/kelompok).
-- Tab Mata Pelajaran menampilkan penanda "dipakai untuk klasterisasi".
+- Tabel `hasil_klaster` ditambah kolom `k_used integer` dan `label text` agar hasil tiap kelompok tersimpan lengkap (perlu satu migrasi database).
+- Nilai WCSS tidak disimpan di database (dihitung ulang saat halaman dibuka), kecuali Anda ingin diarsipkan.
 
 ## Catatan teknis
 
-- Migrasi database diperlukan untuk kolom `dipakai_klaster`; penghapusan + pengisian data lewat operasi data biasa.
-- Total ± 14 kelompok, ratusan siswa; import dilakukan bertahap (batch) agar tidak kena limit.
-- Hasil website akan identik dengan Excel selama daftar mapel fitur dan K sama; kalau ada selisih karena centroid awal, saya sesuaikan setelah pengujian pertama.
+- Dataset di Master Data akan saya cocokkan dulu dengan `DATA_10_11_LENGKAP.xlsx`; kalau ada selisih nama/nilai, data akan di-import ulang.
+- Karena K bisa >3, warna badge klaster diperluas memakai token warna yang ada di design system.
