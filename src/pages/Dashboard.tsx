@@ -21,7 +21,16 @@ export default function Dashboard() {
     },
   });
 
+  const { data: nilaiCount = 0 } = useQuery({
+    queryKey: ["nilai-count"],
+    queryFn: async () => {
+      const { count } = await supabase.from("nilai").select("*", { count: "exact", head: true });
+      return count ?? 0;
+    },
+  });
+
   const { data: mapelList = [] } = useQuery({
+
     queryKey: ["mapel-list"],
     queryFn: async () => {
       const { data: mapelRows } = await supabase.from("mata_pelajaran").select("id, nama");
