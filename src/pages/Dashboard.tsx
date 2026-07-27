@@ -21,29 +21,24 @@ export default function Dashboard() {
     },
   });
 
-  const { data: mapelCount = 0 } = useQuery({
-    queryKey: ["mapel-count"],
-    queryFn: async () => {
-      const { count } = await supabase.from("mata_pelajaran").select("*", { count: "exact", head: true });
-      return count ?? 0;
-    },
-  });
-
-  const { data: nilaiCount = 0 } = useQuery({
-    queryKey: ["nilai-count"],
-    queryFn: async () => {
-      const { count } = await supabase.from("nilai").select("*", { count: "exact", head: true });
-      return count ?? 0;
-    },
-  });
-
   const { data: mapelList = [] } = useQuery({
     queryKey: ["mapel-list"],
     queryFn: async () => {
-      const { data } = await supabase.from("mata_pelajaran").select("nama").order("nama");
-      return data?.map((m) => m.nama) ?? [];
+      const { data: mapelRows } = await supabase.from("mata_pelajaran").select("id, nama");
+      const { data: nilaiRows } = await supabase.from("nilai").select("mata_pelajaran_id");
+      const withScore = new Set((nilaiRows ?? []).map((n) => n.mata_pelajaran_id));
+      const unique = new Map<string, string>();
+      for (const m of mapelRows ?? []) {
+        if (!withScore.has(m.id)) continue;
+        const key = m.nama.trim().toLowerCase();
+        if (!unique.has(key)) unique.set(key, m.nama.trim());
+      }
+      return Array.from(unique.values()).sort((a, b) => a.localeCompare(b));
     },
   });
+
+  const mapelCount = mapelList.length;
+
 
   const stats = [
     { title: "Jumlah Siswa", value: siswaCount, icon: Users, color: "text-primary" },
