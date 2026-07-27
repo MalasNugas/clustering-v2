@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -12,19 +12,38 @@ import { Play, RotateCcw, Download } from "lucide-react";
 import { toast } from "sonner";
 import { kMeans, DataPoint } from "@/lib/kmeans";
 import { minMaxNormalize } from "@/lib/normalize";
+import { runElbow, ElbowResult } from "@/lib/elbow";
+import { clusterLabel, labelClass } from "@/lib/labels";
+import {
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip as RTooltip,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+} from "recharts";
 import * as XLSX from "xlsx";
 
-const K = 3;
+const K_MAX = 6;
 
-const clusterColors = [
-  "bg-primary text-primary-foreground",
-  "bg-accent text-accent-foreground",
-  "bg-warning text-warning-foreground",
-  "bg-destructive text-destructive-foreground",
-  "bg-secondary text-secondary-foreground",
-];
-
-const clusterLabels: Record<number, string> = { 1: "Tinggi", 2: "Sedang", 3: "Rendah" };
+// K optimal hasil pengujian Elbow pada perhitungan manual (bisa diubah manual di UI)
+const DEFAULT_K: Record<string, number> = {
+  "KLS 10 DKV": 4,
+  "KLS 10 DPIB": 3,
+  "KLS 10 TESHA": 3,
+  "KLS 10 TJKT": 3,
+  "KLS 10 TKP": 2,
+  "KLS 10 TKR 1": 3,
+  "KLS 10 TKR 2": 3,
+  "KLS 11 DKV": 3,
+  "KLS 11 DPIB": 4,
+  "KLS 11 TESHA": 3,
+  "KLS 11 TJKT": 4,
+  "KLS 11 TKP": 2,
+  "KLS 11 TKR 1": 5,
+  "KLS 11 TKR 2": 3,
+};
 
 export default function Clustering() {
   const queryClient = useQueryClient();
@@ -32,6 +51,7 @@ export default function Clustering() {
   const [klasterFilter, setKlasterFilter] = useState<string>("all");
   const [kelompokFilter, setKelompokFilter] = useState<string>("all");
   const [showNormalized, setShowNormalized] = useState(false);
+  const [kByGroup, setKByGroup] = useState<Record<string, number>>({});
 
   const { data: jurusan = [] } = useQuery({
     queryKey: ["jurusan"],
@@ -93,7 +113,6 @@ export default function Clustering() {
     return m;
   }, [nilai]);
 
-  // Fitur (mapel yang dipakai) per kelompok
   const featureMapel = (jurusanId: string) =>
     (mapel as any[]).filter((m) => m.jurusan_id === jurusanId && m.dipakai_klaster);
 
@@ -105,6 +124,34 @@ export default function Clustering() {
     return { jSiswa, feats, raw, normalized };
   };
 
+  // Pengujian Elbow Method per kelompok (K=1..6)
+  const elbowByGroup = useMemo(() => {
+    const out = new Map<string, ElbowResult>();
+    for (const j of jurusan as any[]) {
+      const { jSiswa, feats, normalized } = groupData(j.id);
+      if (jSiswa.length < 2 || feats.length === 0) continue;
+      const dp: DataPoint[] = jSiswa.map((s: any, i: number) => ({ id: s.id, values: normalized[i] }));
+      out.set(j.id, runElbow(dp, K_MAX));
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jurusan, siswa, mapel, nilai]);
+
+  // Nilai awal K tiap kelompok: hasil pengujian manual, fallback ke Elbow otomatis
+  useEffect(() => {
+    if ((jurusan as any[]).length === 0 || elbowByGroup.size === 0) return;
+    setKByGroup((prev) => {
+      const next = { ...prev };
+      for (const j of jurusan as any[]) {
+        if (next[j.id]) continue;
+        next[j.id] = DEFAULT_K[j.nama] ?? elbowByGroup.get(j.id)?.optimalK ?? 3;
+      }
+      return next;
+    });
+  }, [jurusan, elbowByGroup]);
+
+  const getK = (j: any) => kByGroup[j.id] ?? DEFAULT_K[j.nama] ?? elbowByGroup.get(j.id)?.optimalK ?? 3;
+
   const runClustering = async () => {
     if (siswa.length === 0 || mapel.length === 0 || nilai.length === 0) {
       toast.error("Data belum lengkap. Silakan import data terlebih dahulu.");
@@ -114,12 +161,20 @@ export default function Clustering() {
     try {
       await supabase.from("hasil_klaster").delete().neq("id", "00000000-0000-0000-0000-000000000000");
 
-      const allInsert: { siswa_id: string; klaster: number; iterasi: number; jurusan_id: string }[] = [];
+      const allInsert: {
+        siswa_id: string;
+        klaster: number;
+        iterasi: number;
+        jurusan_id: string;
+        k_used: number;
+        label: string;
+      }[] = [];
       let processed = 0;
 
       // Perhitungan dilakukan TERPISAH untuk setiap kelas + jurusan
       for (const j of jurusan as any[]) {
         const { jSiswa, feats, raw, normalized } = groupData(j.id);
+        const K = getK(j);
         if (jSiswa.length < K || feats.length === 0) continue;
 
         const dataPoints: DataPoint[] = jSiswa.map((s: any, i: number) => ({
@@ -129,7 +184,7 @@ export default function Clustering() {
 
         const { results, iterations } = kMeans(dataPoints, K, 100);
 
-        // Penamaan klaster: rata-rata nilai ASLI tertinggi = Klaster 1 (Tinggi)
+        // Urutkan klaster: rata-rata nilai ASLI tertinggi = Klaster 1
         const avgByCluster = new Map<number, number>();
         for (let c = 1; c <= K; c++) {
           const idxs = results.map((r, i) => (r.cluster === c ? i : -1)).filter((i) => i >= 0);
@@ -144,11 +199,14 @@ export default function Clustering() {
         ranked.forEach(([c], i) => remap.set(c, i + 1));
 
         for (const r of results) {
+          const cl = remap.get(r.cluster) ?? r.cluster;
           allInsert.push({
             siswa_id: r.id,
-            klaster: remap.get(r.cluster) ?? r.cluster,
+            klaster: cl,
             iterasi: iterations,
             jurusan_id: j.id,
+            k_used: K,
+            label: clusterLabel(cl, K),
           });
         }
         processed++;
@@ -175,7 +233,7 @@ export default function Clustering() {
     toast.success("Hasil klasterisasi direset");
   };
 
-  const klasterMap = new Map((hasilKlaster as any[]).map((h) => [h.siswa_id, h.klaster]));
+  const hasilBySiswa = new Map((hasilKlaster as any[]).map((h) => [h.siswa_id, h]));
 
   const handleExport = () => {
     if ((hasilKlaster as any[]).length === 0) {
@@ -183,6 +241,24 @@ export default function Clustering() {
       return;
     }
     const wb = XLSX.utils.book_new();
+
+    // Sheet ringkasan pengujian Elbow
+    const elbowRows: any[][] = [["Kelompok", "K", "WCSS", "% Penurunan", "K dipakai"]];
+    for (const j of jurusan as any[]) {
+      const el = elbowByGroup.get(j.id);
+      if (!el) continue;
+      for (const p of el.points) {
+        elbowRows.push([
+          j.nama,
+          p.k,
+          Number(p.wcss.toFixed(6)),
+          p.penurunan === undefined ? "" : Number(p.penurunan.toFixed(4)),
+          getK(j),
+        ]);
+      }
+    }
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(elbowRows), "Pengujian Elbow");
+
     for (const j of jurusan as any[]) {
       const { jSiswa, feats, raw, normalized } = groupData(j.id);
       if (jSiswa.length === 0 || feats.length === 0) continue;
@@ -196,15 +272,15 @@ export default function Clustering() {
         "Keterangan",
       ];
       const rows = jSiswa.map((s: any, i: number) => {
-        const cl = klasterMap.get(s.id);
+        const h = hasilBySiswa.get(s.id);
         return [
           i + 1,
           s.nama,
           j.nama,
           ...raw[i],
           ...normalized[i].map((v) => Number(v.toFixed(4))),
-          cl ?? "",
-          cl ? clusterLabels[cl as number] ?? "" : "",
+          h?.klaster ?? "",
+          h?.label ?? (h ? clusterLabel(h.klaster, h.k_used ?? getK(j)) : ""),
         ];
       });
       const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
@@ -214,22 +290,34 @@ export default function Clustering() {
     toast.success("Berhasil mengekspor hasil klasterisasi");
   };
 
-  const clusterSummary = Array.from({ length: K }, (_, i) => ({
-    cluster: i + 1,
-    count: (hasilKlaster as any[]).filter((h) => h.klaster === i + 1).length,
-    label: clusterLabels[i + 1] ?? `K${i + 1}`,
-  }));
-
   const visibleJurusan = (jurusan as any[]).filter(
     (j) => kelompokFilter === "all" || j.id === kelompokFilter
   );
+
+  const labelSummary = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const h of hasilKlaster as any[]) {
+      const lab = h.label ?? clusterLabel(h.klaster, h.k_used ?? 3);
+      m.set(lab, (m.get(lab) ?? 0) + 1);
+    }
+    const order = [
+      "Sangat Tinggi",
+      "Cukup Tinggi",
+      "Tinggi",
+      "Sedang",
+      "Cukup Rendah",
+      "Rendah",
+      "Sangat Rendah",
+    ];
+    return order.filter((l) => m.has(l)).map((l) => ({ label: l, count: m.get(l)! }));
+  }, [hasilKlaster]);
 
   return (
     <div>
       <h2 className="text-2xl font-bold mb-1">Klasterisasi K-Means</h2>
       <p className="text-sm text-muted-foreground mb-6">
-        Alur: normalisasi Min-Max per mata pelajaran → K-Means (K={K}), dihitung terpisah untuk setiap
-        kelas &amp; jurusan.
+        Alur: data mentah → normalisasi Min-Max → K-Means → penentuan K optimal dengan Elbow Method,
+        dihitung terpisah untuk setiap kelas &amp; jurusan.
       </p>
 
       <Card className="shadow-sm mb-6">
@@ -242,6 +330,18 @@ export default function Clustering() {
               <Play className="mr-2 h-4 w-4" />
               {running ? "Memproses..." : "Jalankan K-Means"}
             </Button>
+            <div className="space-y-1.5">
+              <Label>Kelompok Kelas</Label>
+              <Select value={kelompokFilter} onValueChange={setKelompokFilter}>
+                <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Kelompok</SelectItem>
+                  {(jurusan as any[]).map((j) => (
+                    <SelectItem key={j.id} value={j.id}>{j.nama}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             {(hasilKlaster as any[]).length > 0 && (
               <>
                 <Button variant="outline" onClick={handleReset}>
@@ -251,26 +351,14 @@ export default function Clustering() {
                   <Download className="mr-2 h-4 w-4" /> Export Excel
                 </Button>
                 <div className="space-y-1.5">
-                  <Label>Kelompok Kelas</Label>
-                  <Select value={kelompokFilter} onValueChange={setKelompokFilter}>
-                    <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Semua Kelompok</SelectItem>
-                      {(jurusan as any[]).map((j) => (
-                        <SelectItem key={j.id} value={j.id}>{j.nama}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
                   <Label>Filter Klaster</Label>
                   <Select value={klasterFilter} onValueChange={setKlasterFilter}>
                     <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Semua Klaster</SelectItem>
-                      <SelectItem value="1">Klaster 1 — Tinggi</SelectItem>
-                      <SelectItem value="2">Klaster 2 — Sedang</SelectItem>
-                      <SelectItem value="3">Klaster 3 — Rendah</SelectItem>
+                      {Array.from({ length: K_MAX }, (_, i) => (
+                        <SelectItem key={i + 1} value={String(i + 1)}>Klaster {i + 1}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -284,22 +372,94 @@ export default function Clustering() {
         </CardContent>
       </Card>
 
+      {/* Pengujian Elbow Method per kelompok */}
+      {visibleJurusan.map((j) => {
+        const el = elbowByGroup.get(j.id);
+        if (!el) return null;
+        const K = getK(j);
+        return (
+          <Card key={`elbow-${j.id}`} className="shadow-sm mb-6">
+            <CardHeader className="flex flex-row items-start justify-between gap-4">
+              <div>
+                <CardTitle className="text-base">Pengujian Elbow Method — {j.nama}</CardTitle>
+                <p className="text-xs text-muted-foreground mt-1">
+                  WCSS dihitung untuk K=1 sampai K={K_MAX}. Titik siku menunjukkan K optimal
+                  (otomatis: K={el.optimalK}).
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label>K dipakai</Label>
+                <Select
+                  value={String(K)}
+                  onValueChange={(v) => setKByGroup((p) => ({ ...p, [j.id]: Number(v) }))}
+                >
+                  <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: K_MAX - 1 }, (_, i) => i + 2).map((k) => (
+                      <SelectItem key={k} value={String(k)}>K = {k}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-6 md:grid-cols-2">
+              <div className="h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={el.points} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="k" tickLine={false} axisLine={false} fontSize={12} />
+                    <YAxis tickLine={false} axisLine={false} fontSize={12} />
+                    <RTooltip
+                      formatter={(v: any) => Number(v).toFixed(5)}
+                      labelFormatter={(l) => `K = ${l}`}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="wcss"
+                      stroke="hsl(var(--primary))"
+                      strokeWidth={2}
+                      dot={{ r: 3 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Perubahan K</TableHead>
+                    <TableHead className="text-right">WCSS</TableHead>
+                    <TableHead className="text-right">% Penurunan</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {el.points.map((p) => (
+                    <TableRow key={p.k} className={p.k === K ? "bg-muted/60 font-medium" : undefined}>
+                      <TableCell>K = {p.k}</TableCell>
+                      <TableCell className="text-right">{p.wcss.toFixed(5)}</TableCell>
+                      <TableCell className="text-right">
+                        {p.penurunan === undefined ? "-" : `${p.penurunan.toFixed(2)}%`}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        );
+      })}
+
       {(hasilKlaster as any[]).length > 0 && (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-            {clusterSummary.map((cs) => (
-              <Card key={cs.cluster} className="shadow-sm">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
+            {labelSummary.map((ls) => (
+              <Card key={ls.label} className="shadow-sm">
                 <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <div>
-                      <p className="text-sm text-muted-foreground">
-                        Klaster {cs.cluster} — {cs.label}
-                      </p>
-                      <p className="text-2xl font-bold">{cs.count} siswa</p>
+                      <p className="text-sm text-muted-foreground">{ls.label}</p>
+                      <p className="text-2xl font-bold">{ls.count} siswa</p>
                     </div>
-                    <Badge className={clusterColors[(cs.cluster - 1) % clusterColors.length]}>
-                      K{cs.cluster}
-                    </Badge>
+                    <Badge className={labelClass(ls.label)}>{ls.label}</Badge>
                   </div>
                 </CardContent>
               </Card>
@@ -311,10 +471,14 @@ export default function Clustering() {
             if (jSiswa.length === 0 || feats.length === 0) return null;
             const rows = jSiswa
               .map((s: any, i: number) => ({ s, raw: raw[i], norm: normalized[i] }))
-              .filter((r) => klasterFilter === "all" || klasterMap.get(r.s.id) === Number(klasterFilter))
+              .filter(
+                (r) =>
+                  klasterFilter === "all" ||
+                  hasilBySiswa.get(r.s.id)?.klaster === Number(klasterFilter)
+              )
               .sort((a, b) => {
-                const ca = klasterMap.get(a.s.id) ?? 999;
-                const cb = klasterMap.get(b.s.id) ?? 999;
+                const ca = hasilBySiswa.get(a.s.id)?.klaster ?? 999;
+                const cb = hasilBySiswa.get(b.s.id)?.klaster ?? 999;
                 if (ca !== cb) return ca - cb;
                 return (a.s.nama ?? "").localeCompare(b.s.nama ?? "");
               });
@@ -325,7 +489,7 @@ export default function Clustering() {
                 <CardHeader>
                   <CardTitle className="text-base">Hasil Klasterisasi — {j.nama}</CardTitle>
                   <p className="text-xs text-muted-foreground">
-                    Variabel: {feats.map((m: any) => m.nama).join(", ")}
+                    K = {getK(j)} · Variabel: {feats.map((m: any) => m.nama).join(", ")}
                   </p>
                 </CardHeader>
                 <CardContent>
@@ -343,7 +507,8 @@ export default function Clustering() {
                       </TableHeader>
                       <TableBody>
                         {rows.map((r, i) => {
-                          const cl = klasterMap.get(r.s.id);
+                          const h = hasilBySiswa.get(r.s.id);
+                          const lab = h?.label ?? (h ? clusterLabel(h.klaster, h.k_used ?? getK(j)) : null);
                           return (
                             <TableRow key={r.s.id}>
                               <TableCell>{i + 1}</TableCell>
@@ -354,9 +519,9 @@ export default function Clustering() {
                                 </TableCell>
                               ))}
                               <TableCell className="text-right sticky right-0 bg-background">
-                                {cl ? (
-                                  <Badge className={clusterColors[(cl - 1) % clusterColors.length]}>
-                                    Klaster {cl} — {clusterLabels[cl] ?? ""}
+                                {h ? (
+                                  <Badge className={labelClass(lab ?? "")}>
+                                    Klaster {h.klaster} — {lab}
                                   </Badge>
                                 ) : (
                                   "-"
