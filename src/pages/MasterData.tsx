@@ -19,6 +19,7 @@ import {
 import { Upload, Trash2, Plus, Pencil, Search } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+import { shortMapel } from "@/lib/mapelShort";
 
 type Siswa = { id: string; nis: string; nama: string; jurusan_id: string | null; jurusan?: { nama: string } | null };
 type Jurusan = { id: string; nama: string };
@@ -466,7 +467,9 @@ export default function MasterData() {
                     <TableHead>Nama</TableHead>
                     <TableHead>Kelas</TableHead>
                     {visibleMapel.map((m) => (
-                      <TableHead key={m.key} className="text-center">{m.nama}</TableHead>
+                      <TableHead key={m.key} className="text-center whitespace-nowrap" title={m.nama}>
+                        {shortMapel(m.nama)}
+                      </TableHead>
                     ))}
 
                     <TableHead className="text-right sticky right-0 bg-background">Aksi</TableHead>
@@ -563,7 +566,9 @@ export default function MasterData() {
                 <div className="grid grid-cols-2 gap-2">
                   {formMapel.map((m) => (
                     <div key={m.id} className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">{m.nama}</Label>
+                      <Label className="text-xs text-muted-foreground" title={m.nama}>
+                        {shortMapel(m.nama)}
+                      </Label>
                       <Input
                         type="number"
                         min={0}

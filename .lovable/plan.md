@@ -1,21 +1,27 @@
 ## Temuan
 
-- Tabel `mata_pelajaran` menyimpan satu baris per jurusan, sehingga ada **153 baris** untuk hanya **30 nama unik** — inilah sumber tampilan "double".
-- Hasil query: **tidak ada** mata pelajaran yang benar-benar tanpa nilai di database (semua punya baris nilai > 0). Jadi kolom yang terlihat kosong muncul karena Master Data menampilkan seluruh 153 kolom saat filter jurusan = "Semua", sehingga siswa dari jurusan lain kosong.
-
-Perbaikan bersifat tampilan saja — tidak ada perubahan database, data tidak dihapus.
+- Kebijakan akses tabel `hasil_klaster` hanya mengizinkan role **guru**. Akun yang dipakai (`marchellino940@gmail.com`) berperan **admin**, sehingga simpan hasil K-Means ditolak.
+- Nama mata pelajaran di database sangat panjang (mis. "Dasar Dasar Desain Pemodelan dan Informasi Banguna", "Pendidikan Jasmani, Olahraga, dan Kesehatan"), membuat kolom tabel Master Data melebar.
 
 ## Perubahan
 
-**Dashboard (`src/pages/Dashboard.tsx`)**
-- Daftar "Daftar Mata Pelajaran": tampilkan nama unik (dedupe case-insensitive, urut alfabetis).
-- Kartu "Mata Pelajaran": hitung jumlah nama unik, bukan jumlah baris.
+**1. Izin hasil klasterisasi (migrasi database)**
+- Ganti kebijakan kelola `hasil_klaster` agar berlaku untuk guru **dan** admin (memakai fungsi akses yang sudah ada), sehingga admin bisa menjalankan dan mereset K-Means. Tampilan hasil tetap bisa dilihat publik.
 
-**Master Data (`src/pages/MasterData.tsx`)**
-- Kolom mata pelajaran yang ditampilkan disaring: hanya mapel yang punya minimal satu nilai pada siswa yang sedang tampil (setelah filter jurusan/tahun/pencarian).
-- Saat filter jurusan = "Semua", kolom digabung per nama unik agar tidak muncul kolom kembar; nilai tiap siswa diambil dari mapel milik jurusannya.
-- Form tambah/edit nilai tetap memakai mapel spesifik jurusan siswa (tidak berubah), sehingga penyimpanan nilai tetap benar.
+**2. Singkatan nama mata pelajaran (tampilan saja)**
+- Tambah util `src/lib/mapelShort.ts` berisi pemetaan nama panjang → singkat, mis.:
+  - Pendidikan Agama Islam dan Budi Pekerti → PAI
+  - Pendidikan Jasmani, Olahraga, dan Kesehatan → PJOK
+  - Pendidikan Pancasila → PP
+  - Bahasa Indonesia → B. Indo; Bahasa Inggris → B. Ing
+  - Kreativitas, Inovasi, dan Kewirausahaan → KIK
+  - Koding dan Kecerdasan Artifisial → Koding & KA
+  - Dasar Dasar … → "Dasar" + akronim jurusan (mis. Dasar DKV, Dasar DPIB, Dasar TJKT, Dasar TKR)
+  - Muatan Lokal Potensi Daerah → Mulok
+  - Matematika (Umum) → MTK; Projek IPAS → IPAS
+  - Nama lain: akronim otomatis bila > 18 karakter.
+- Pakai singkatan pada header kolom tabel Master Data, dengan `title`/tooltip berisi nama lengkap agar tetap jelas.
 
 ## Catatan teknis
 
-Dedupe dilakukan di frontend memakai peta `nama → daftar mapel_id`; pengambilan nilai per siswa mencari id mapel yang cocok dengan jurusan siswa tersebut. Logika import, klasterisasi, dan `dipakai_klaster` tidak disentuh.
+Nama asli di database tidak diubah — hanya lapisan tampilan, jadi import, klasterisasi, dan pencocokan `dipakai_klaster` tetap aman. Migrasi hanya menyentuh kebijakan akses `hasil_klaster`.
