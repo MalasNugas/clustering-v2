@@ -520,9 +520,10 @@ export default function Clustering() {
                               ))}
                               <TableCell className="text-right sticky right-0 bg-background">
                                 {h ? (
-                                  <Badge className={labelClass(lab ?? "")}>
-                                    Klaster {h.klaster} — {lab}
+                                  <Badge className={labelClass(lab ?? "")} title={lab ?? undefined}>
+                                    Klaster {h.klaster}
                                   </Badge>
+
                                 ) : (
                                   "-"
                                 )}
