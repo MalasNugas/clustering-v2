@@ -388,7 +388,7 @@ export default function Clustering() {
                 </p>
               </div>
               <div className="space-y-1.5">
-                <Label>K dipakai</Label>
+                <Label>K Optimal</Label>
                 <Select
                   value={String(K)}
                   onValueChange={(v) => setKByGroup((p) => ({ ...p, [j.id]: Number(v) }))}
