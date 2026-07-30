@@ -386,8 +386,8 @@ export default function Clustering() {
         </CardContent>
       </Card>
 
-      {/* Pengujian Elbow Method per kelompok */}
-      {visibleJurusan.map((j) => {
+      {/* Pengujian Elbow Method per kelompok (khusus admin) */}
+      {isAdmin && visibleJurusan.map((j) => {
         const el = elbowByGroup.get(j.id);
         if (!el) return null;
         const K = getK(j);
