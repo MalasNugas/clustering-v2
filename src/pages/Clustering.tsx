@@ -374,10 +374,12 @@ export default function Clustering() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex items-center gap-2 pb-2">
-                  <Switch id="norm" checked={showNormalized} onCheckedChange={setShowNormalized} />
-                  <Label htmlFor="norm">Tampilkan nilai normalisasi</Label>
-                </div>
+                {isAdmin && (
+                  <div className="flex items-center gap-2 pb-2">
+                    <Switch id="norm" checked={showNormalized} onCheckedChange={setShowNormalized} />
+                    <Label htmlFor="norm">Tampilkan nilai normalisasi</Label>
+                  </div>
+                )}
               </>
             )}
           </div>
