@@ -1,37 +1,28 @@
-## Masalah
+## Tujuan
 
-Vercel masih menampilkan versi lama seluruhnya. Karena Vercel build dari repo GitHub, artinya commit terbaru dari Lovable belum sampai ke branch yang dipakai Vercel. Penyebab paling umum pada project hasil **remix**: koneksi GitHub tidak ikut ter-copy, sehingga project ini belum tersambung ke repo mana pun — Vercel masih membangun repo project lama.
+Halaman Klasterisasi tampil berbeda tergantung role:
+- **Admin**: tetap seperti sekarang (pengujian Elbow Method, pemilihan K per kelompok, toggle normalisasi).
+- **Guru**: tampilan sederhana — hanya tombol Jalankan K-Means dengan K = 3 untuk semua kelompok, dan nilai yang ditampilkan sudah dalam bentuk normalisasi.
 
-## Langkah perbaikan
+## Perubahan
 
-1. **Cek koneksi GitHub project ini**
-   - Menu Plus (+) di kotak chat → GitHub. Jika tertulis "Connect project", berarti project remix ini memang belum tersambung ke repo apa pun.
+**1. Deteksi role di halaman Klasterisasi (`src/pages/Clustering.tsx`)**
+- Pakai hook `useUserRole()` yang sudah ada (`isAdmin` / `isGuru`).
 
-2. **Jika belum tersambung**
-   - Buat repo baru dari Lovable (GitHub → Create Repository). Seluruh kode versi terbaru akan ter-push ke repo itu.
-   - Di Vercel: buat project baru dari repo baru tersebut, atau ubah Git repository project Vercel yang lama ke repo baru (Vercel → Settings → Git).
+**2. Sembunyikan bagian Elbow untuk Guru**
+- Seluruh blok kartu "Pengujian Elbow Method — {kelompok}" (grafik WCSS + tabel % penurunan + dropdown "K Optimal") hanya dirender bila `isAdmin`.
 
-3. **Jika sudah tersambung**
-   - Pastikan branch yang dipakai Vercel sama dengan branch default repo (biasanya `main`).
-   - Cek tab Deployments di Vercel: apakah ada build baru setelah perubahan terakhir. Jika tidak ada, jalankan Redeploy manual dengan opsi cache dimatikan.
+**3. K tetap 3 untuk Guru**
+- Fungsi penentu K dibuat mengembalikan 3 untuk role guru, mengabaikan `DEFAULT_K` dan hasil Elbow otomatis. Jadi tombol "Jalankan K-Means" pada akun guru selalu menjalankan K = 3 untuk semua kelas/jurusan, dengan label 3 tingkat (Tinggi / Sedang / Rendah) sesuai skala label yang sudah ada.
 
-4. **Set Environment Variables di Vercel**
-   Build akan sukses tapi aplikasi blank/tanpa data jika variabel ini belum diisi di Vercel (Settings → Environment Variables):
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_PUBLISHABLE_KEY`
-   - `VITE_SUPABASE_PROJECT_ID`
+**4. Normalisasi otomatis aktif**
+- Nilai awal `showNormalized` di-set `true` saat role guru, dan switch "Tampilkan nilai normalisasi" disembunyikan agar tampilan tetap konsisten (admin masih bisa mengganti).
 
-   Nilainya harus menunjuk ke backend yang sama dengan yang dipakai preview, atau ke Supabase milik Anda sendiri jika sudah dimigrasi dengan SQL yang saya berikan sebelumnya.
-
-5. **Verifikasi**
-   - Setelah deploy selesai, buka situs Vercel dalam mode incognito (menghindari cache browser), login ulang, lalu cek halaman Klasterisasi — kolom Klaster harus menampilkan "Klaster 1" saja.
+**5. Elemen lain**
+- Tombol Reset, filter Kelompok Kelas, filter Klaster, dan Export Excel tetap tersedia untuk guru (tidak diminta dihapus). Teks pengantar di atas halaman disesuaikan untuk guru: alur data mentah → normalisasi Min-Max → K-Means (K = 3), tanpa menyebut Elbow.
 
 ## Catatan teknis
 
-- Perubahan **database** (role admin/guru, migrasi RLS, data siswa) tidak butuh deploy — langsung berlaku di semua environment yang menunjuk backend yang sama.
-- Perubahan **kode frontend** butuh push ke GitHub + build ulang Vercel.
-- Alternatif tanpa Vercel: gunakan tombol Publish di Lovable untuk mendapat URL `.lovable.app` yang otomatis selalu memakai kode terbaru.
-
-## Yang bisa saya kerjakan
-
-Langkah 1–3 harus Anda lakukan di UI Lovable dan dashboard Vercel (saya tidak punya akses ke sana). Jika setelah repo tersambung masih ada error build di Vercel, kirimkan log build-nya dan saya perbaiki di kode.
+- Perhitungan Elbow (`elbowByGroup`) tidak perlu dijalankan pada akun guru sehingga halaman lebih ringan.
+- Hasil disimpan seperti biasa ke tabel hasil klaster dengan `k_used = 3` dan label sesuai K = 3.
+- Tidak ada perubahan database maupun aturan akses.
