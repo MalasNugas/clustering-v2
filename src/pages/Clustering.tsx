@@ -243,7 +243,7 @@ export default function Clustering() {
     const wb = XLSX.utils.book_new();
 
     // Sheet ringkasan pengujian Elbow
-    const elbowRows: any[][] = [["Kelompok", "K", "WCSS", "% Penurunan", "K dipakai"]];
+    const elbowRows: any[][] = [["Kelompok", "K", "WCSS", "% Penurunan", "K Optimal"]];
     for (const j of jurusan as any[]) {
       const el = elbowByGroup.get(j.id);
       if (!el) continue;
@@ -388,7 +388,7 @@ export default function Clustering() {
                 </p>
               </div>
               <div className="space-y-1.5">
-                <Label>K dipakai</Label>
+                <Label>K Optimal</Label>
                 <Select
                   value={String(K)}
                   onValueChange={(v) => setKByGroup((p) => ({ ...p, [j.id]: Number(v) }))}
