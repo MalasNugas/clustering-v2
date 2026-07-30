@@ -327,8 +327,9 @@ export default function Clustering() {
     <div>
       <h2 className="text-2xl font-bold mb-1">Klasterisasi K-Means</h2>
       <p className="text-sm text-muted-foreground mb-6">
-        Alur: data mentah → normalisasi Min-Max → K-Means → penentuan K optimal dengan Elbow Method,
-        dihitung terpisah untuk setiap kelas &amp; jurusan.
+        {isAdmin
+          ? "Alur: data mentah → normalisasi Min-Max → K-Means → penentuan K optimal dengan Elbow Method, dihitung terpisah untuk setiap kelas & jurusan."
+          : "Alur: data mentah → normalisasi Min-Max → K-Means dengan K = 3, dihitung terpisah untuk setiap kelas & jurusan."}
       </p>
 
       <Card className="shadow-sm mb-6">
