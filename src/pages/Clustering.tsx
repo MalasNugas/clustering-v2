@@ -130,9 +130,10 @@ export default function Clustering() {
     return { jSiswa, feats, raw, normalized };
   };
 
-  // Pengujian Elbow Method per kelompok (K=1..6)
+  // Pengujian Elbow Method per kelompok (K=1..6) — hanya untuk admin
   const elbowByGroup = useMemo(() => {
     const out = new Map<string, ElbowResult>();
+    if (!isAdmin) return out;
     for (const j of jurusan as any[]) {
       const { jSiswa, feats, normalized } = groupData(j.id);
       if (jSiswa.length < 2 || feats.length === 0) continue;
@@ -141,10 +142,11 @@ export default function Clustering() {
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jurusan, siswa, mapel, nilai]);
+  }, [jurusan, siswa, mapel, nilai, isAdmin]);
 
   // Nilai awal K tiap kelompok: hasil pengujian manual, fallback ke Elbow otomatis
   useEffect(() => {
+    if (!isAdmin) return;
     if ((jurusan as any[]).length === 0 || elbowByGroup.size === 0) return;
     setKByGroup((prev) => {
       const next = { ...prev };
@@ -154,9 +156,12 @@ export default function Clustering() {
       }
       return next;
     });
-  }, [jurusan, elbowByGroup]);
+  }, [jurusan, elbowByGroup, isAdmin]);
 
-  const getK = (j: any) => kByGroup[j.id] ?? DEFAULT_K[j.nama] ?? elbowByGroup.get(j.id)?.optimalK ?? 3;
+  const getK = (j: any) =>
+    isAdmin
+      ? kByGroup[j.id] ?? DEFAULT_K[j.nama] ?? elbowByGroup.get(j.id)?.optimalK ?? 3
+      : 3;
 
   const runClustering = async () => {
     if (siswa.length === 0 || mapel.length === 0 || nilai.length === 0) {
