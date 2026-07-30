@@ -14,6 +14,7 @@ import { kMeans, DataPoint } from "@/lib/kmeans";
 import { minMaxNormalize } from "@/lib/normalize";
 import { runElbow, ElbowResult } from "@/lib/elbow";
 import { clusterLabel, labelClass } from "@/lib/labels";
+import { useUserRole } from "@/hooks/useUserRole";
 import {
   Line,
   LineChart,
