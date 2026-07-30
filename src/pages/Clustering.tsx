@@ -243,7 +243,7 @@ export default function Clustering() {
     const wb = XLSX.utils.book_new();
 
     // Sheet ringkasan pengujian Elbow
-    const elbowRows: any[][] = [["Kelompok", "K", "WCSS", "% Penurunan", "K dipakai"]];
+    const elbowRows: any[][] = [["Kelompok", "K", "WCSS", "% Penurunan", "K Optimal"]];
     for (const j of jurusan as any[]) {
       const el = elbowByGroup.get(j.id);
       if (!el) continue;
