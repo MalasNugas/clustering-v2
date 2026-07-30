@@ -47,11 +47,16 @@ const DEFAULT_K: Record<string, number> = {
 
 export default function Clustering() {
   const queryClient = useQueryClient();
+  const { isAdmin } = useUserRole();
   const [running, setRunning] = useState(false);
   const [klasterFilter, setKlasterFilter] = useState<string>("all");
   const [kelompokFilter, setKelompokFilter] = useState<string>("all");
   const [showNormalized, setShowNormalized] = useState(false);
   const [kByGroup, setKByGroup] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!isAdmin) setShowNormalized(true);
+  }, [isAdmin]);
 
   const { data: jurusan = [] } = useQuery({
     queryKey: ["jurusan"],
