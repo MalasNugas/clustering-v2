@@ -14,6 +14,7 @@ import { kMeans, DataPoint } from "@/lib/kmeans";
 import { minMaxNormalize } from "@/lib/normalize";
 import { runElbow, ElbowResult } from "@/lib/elbow";
 import { clusterLabel, labelClass } from "@/lib/labels";
+import { useUserRole } from "@/hooks/useUserRole";
 import {
   Line,
   LineChart,
@@ -47,11 +48,16 @@ const DEFAULT_K: Record<string, number> = {
 
 export default function Clustering() {
   const queryClient = useQueryClient();
+  const { isAdmin } = useUserRole();
   const [running, setRunning] = useState(false);
   const [klasterFilter, setKlasterFilter] = useState<string>("all");
   const [kelompokFilter, setKelompokFilter] = useState<string>("all");
   const [showNormalized, setShowNormalized] = useState(false);
   const [kByGroup, setKByGroup] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!isAdmin) setShowNormalized(true);
+  }, [isAdmin]);
 
   const { data: jurusan = [] } = useQuery({
     queryKey: ["jurusan"],
@@ -124,9 +130,10 @@ export default function Clustering() {
     return { jSiswa, feats, raw, normalized };
   };
 
-  // Pengujian Elbow Method per kelompok (K=1..6)
+  // Pengujian Elbow Method per kelompok (K=1..6) — hanya untuk admin
   const elbowByGroup = useMemo(() => {
     const out = new Map<string, ElbowResult>();
+    if (!isAdmin) return out;
     for (const j of jurusan as any[]) {
       const { jSiswa, feats, normalized } = groupData(j.id);
       if (jSiswa.length < 2 || feats.length === 0) continue;
@@ -135,10 +142,11 @@ export default function Clustering() {
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jurusan, siswa, mapel, nilai]);
+  }, [jurusan, siswa, mapel, nilai, isAdmin]);
 
   // Nilai awal K tiap kelompok: hasil pengujian manual, fallback ke Elbow otomatis
   useEffect(() => {
+    if (!isAdmin) return;
     if ((jurusan as any[]).length === 0 || elbowByGroup.size === 0) return;
     setKByGroup((prev) => {
       const next = { ...prev };
@@ -148,9 +156,12 @@ export default function Clustering() {
       }
       return next;
     });
-  }, [jurusan, elbowByGroup]);
+  }, [jurusan, elbowByGroup, isAdmin]);
 
-  const getK = (j: any) => kByGroup[j.id] ?? DEFAULT_K[j.nama] ?? elbowByGroup.get(j.id)?.optimalK ?? 3;
+  const getK = (j: any) =>
+    isAdmin
+      ? kByGroup[j.id] ?? DEFAULT_K[j.nama] ?? elbowByGroup.get(j.id)?.optimalK ?? 3
+      : 3;
 
   const runClustering = async () => {
     if (siswa.length === 0 || mapel.length === 0 || nilai.length === 0) {
@@ -316,8 +327,9 @@ export default function Clustering() {
     <div>
       <h2 className="text-2xl font-bold mb-1">Klasterisasi K-Means</h2>
       <p className="text-sm text-muted-foreground mb-6">
-        Alur: data mentah → normalisasi Min-Max → K-Means → penentuan K optimal dengan Elbow Method,
-        dihitung terpisah untuk setiap kelas &amp; jurusan.
+        {isAdmin
+          ? "Alur: data mentah → normalisasi Min-Max → K-Means → penentuan K optimal dengan Elbow Method, dihitung terpisah untuk setiap kelas & jurusan."
+          : "Alur: data mentah → normalisasi Min-Max → K-Means dengan K = 3, dihitung terpisah untuk setiap kelas & jurusan."}
       </p>
 
       <Card className="shadow-sm mb-6">
@@ -328,7 +340,7 @@ export default function Clustering() {
           <div className="flex flex-wrap gap-4 items-end">
             <Button onClick={runClustering} disabled={running}>
               <Play className="mr-2 h-4 w-4" />
-              {running ? "Memproses..." : "Jalankan K-Means"}
+              {running ? "Memproses..." : isAdmin ? "Jalankan K-Means" : "Jalankan K-Means (K = 3)"}
             </Button>
             <div className="space-y-1.5">
               <Label>Kelompok Kelas</Label>
@@ -362,18 +374,20 @@ export default function Clustering() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex items-center gap-2 pb-2">
-                  <Switch id="norm" checked={showNormalized} onCheckedChange={setShowNormalized} />
-                  <Label htmlFor="norm">Tampilkan nilai normalisasi</Label>
-                </div>
+                {isAdmin && (
+                  <div className="flex items-center gap-2 pb-2">
+                    <Switch id="norm" checked={showNormalized} onCheckedChange={setShowNormalized} />
+                    <Label htmlFor="norm">Tampilkan nilai normalisasi</Label>
+                  </div>
+                )}
               </>
             )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Pengujian Elbow Method per kelompok */}
-      {visibleJurusan.map((j) => {
+      {/* Pengujian Elbow Method per kelompok (khusus admin) */}
+      {isAdmin && visibleJurusan.map((j) => {
         const el = elbowByGroup.get(j.id);
         if (!el) return null;
         const K = getK(j);
