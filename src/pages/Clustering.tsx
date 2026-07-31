@@ -224,12 +224,21 @@ export default function Clustering() {
           });
         }
         processed++;
+        logDetails.push({ kelompok: j.nama, k: K, iterasi: iterations, siswa: jSiswa.length });
       }
 
       for (let i = 0; i < allInsert.length; i += 500) {
         const { error } = await supabase.from("hasil_klaster").insert(allInsert.slice(i, i + 500));
         if (error) throw error;
       }
+
+      await logClustering({
+        action: "run",
+        groupCount: processed,
+        studentCount: allInsert.length,
+        normalized: showNormalized,
+        details: logDetails,
+      });
 
       toast.success(`Klasterisasi selesai untuk ${processed} kelompok kelas!`);
       refetchHasil();
@@ -242,7 +251,15 @@ export default function Clustering() {
   };
 
   const handleReset = async () => {
+    const removed = (hasilKlaster as any[]).length;
     await supabase.from("hasil_klaster").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    await logClustering({
+      action: "reset",
+      groupCount: 0,
+      studentCount: removed,
+      normalized: showNormalized,
+      details: [],
+    });
     refetchHasil();
     toast.success("Hasil klasterisasi direset");
   };
