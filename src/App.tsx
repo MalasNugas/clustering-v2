@@ -12,6 +12,7 @@ import Clustering from "./pages/Clustering";
 import Profile from "./pages/Profile";
 import AdminGuru from "./pages/AdminGuru";
 import AdminRequests from "./pages/AdminRequests";
+import AdminLogs from "./pages/AdminLogs";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -63,6 +64,14 @@ const App = () => (
               element={
                 <ProtectedLayout requireRole="admin">
                   <AdminRequests />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/admin/logs"
+              element={
+                <ProtectedLayout requireRole="admin">
+                  <AdminLogs />
                 </ProtectedLayout>
               }
             />

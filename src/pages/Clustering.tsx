@@ -15,6 +15,7 @@ import { minMaxNormalize } from "@/lib/normalize";
 import { runElbow, ElbowResult } from "@/lib/elbow";
 import { clusterLabel, labelClass } from "@/lib/labels";
 import { useUserRole } from "@/hooks/useUserRole";
+import { logClustering, ClusteringLogDetail } from "@/lib/clusteringLog";
 import {
   Line,
   LineChart,
