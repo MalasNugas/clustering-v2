@@ -139,9 +139,6 @@ export default function Auth() {
               </TabsContent>
             </Tabs>
             <div className="mt-4 text-center">
-              <Link to="/" className="text-sm text-muted-foreground hover:text-primary">
-                ← Kembali ke beranda
-              </Link>
             </div>
           </CardContent>
         </Card>
