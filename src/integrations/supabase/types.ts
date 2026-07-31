@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      clustering_logs: {
+        Row: {
+          action: string
+          created_at: string
+          details: Json
+          group_count: number
+          id: string
+          normalized: boolean
+          student_count: number
+          user_id: string
+          user_nama: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: Json
+          group_count?: number
+          id?: string
+          normalized?: boolean
+          student_count?: number
+          user_id: string
+          user_nama?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: Json
+          group_count?: number
+          id?: string
+          normalized?: boolean
+          student_count?: number
+          user_id?: string
+          user_nama?: string | null
+        }
+        Relationships: []
+      }
       hasil_klaster: {
         Row: {
           created_at: string
