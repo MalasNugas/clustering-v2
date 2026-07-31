@@ -15,6 +15,7 @@ import { minMaxNormalize } from "@/lib/normalize";
 import { runElbow, ElbowResult } from "@/lib/elbow";
 import { clusterLabel, labelClass } from "@/lib/labels";
 import { useUserRole } from "@/hooks/useUserRole";
+import { logClustering, ClusteringLogDetail } from "@/lib/clusteringLog";
 import {
   Line,
   LineChart,
@@ -181,6 +182,8 @@ export default function Clustering() {
         label: string;
       }[] = [];
       let processed = 0;
+      const logDetails: ClusteringLogDetail[] = [];
+
 
       // Perhitungan dilakukan TERPISAH untuk setiap kelas + jurusan
       for (const j of jurusan as any[]) {
@@ -221,12 +224,21 @@ export default function Clustering() {
           });
         }
         processed++;
+        logDetails.push({ kelompok: j.nama, k: K, iterasi: iterations, siswa: jSiswa.length });
       }
 
       for (let i = 0; i < allInsert.length; i += 500) {
         const { error } = await supabase.from("hasil_klaster").insert(allInsert.slice(i, i + 500));
         if (error) throw error;
       }
+
+      await logClustering({
+        action: "run",
+        groupCount: processed,
+        studentCount: allInsert.length,
+        normalized: showNormalized,
+        details: logDetails,
+      });
 
       toast.success(`Klasterisasi selesai untuk ${processed} kelompok kelas!`);
       refetchHasil();
@@ -239,7 +251,15 @@ export default function Clustering() {
   };
 
   const handleReset = async () => {
+    const removed = (hasilKlaster as any[]).length;
     await supabase.from("hasil_klaster").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    await logClustering({
+      action: "reset",
+      groupCount: 0,
+      studentCount: removed,
+      normalized: showNormalized,
+      details: [],
+    });
     refetchHasil();
     toast.success("Hasil klasterisasi direset");
   };

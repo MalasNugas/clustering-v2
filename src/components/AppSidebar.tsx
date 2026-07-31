@@ -1,4 +1,4 @@
-import { LayoutDashboard, Database, GitBranch, User, Users, Inbox } from "lucide-react";
+import { LayoutDashboard, Database, GitBranch, User, Users, Inbox, History } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
   Sidebar,
@@ -28,6 +28,7 @@ export function AppSidebar() {
   const adminItems = [
     { title: "Kelola Guru", url: "/admin/guru", icon: Users },
     { title: "Permintaan Akses", url: "/admin/requests", icon: Inbox },
+    { title: "Log Klasterisasi", url: "/admin/logs", icon: History },
   ];
 
   return (

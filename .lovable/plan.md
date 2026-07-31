@@ -1,28 +1,42 @@
 ## Tujuan
 
-Halaman Klasterisasi tampil berbeda tergantung role:
-- **Admin**: tetap seperti sekarang (pengujian Elbow Method, pemilihan K per kelompok, toggle normalisasi).
-- **Guru**: tampilan sederhana — hanya tombol Jalankan K-Means dengan K = 3 untuk semua kelompok, dan nilai yang ditampilkan sudah dalam bentuk normalisasi.
+Admin bisa melihat riwayat (log) siapa menjalankan atau mereset klasterisasi, kapan, dengan pengaturan apa, dan hasil ringkasnya.
 
-## Perubahan
+## Yang dibangun
 
-**1. Deteksi role di halaman Klasterisasi (`src/pages/Clustering.tsx`)**
-- Pakai hook `useUserRole()` yang sudah ada (`isAdmin` / `isGuru`).
+**1. Tabel log baru (`clustering_logs`)**
 
-**2. Sembunyikan bagian Elbow untuk Guru**
-- Seluruh blok kartu "Pengujian Elbow Method — {kelompok}" (grafik WCSS + tabel % penurunan + dropdown "K Optimal") hanya dirender bila `isAdmin`.
+Menyimpan setiap aksi di halaman Klasterisasi:
+- siapa yang menjalankan (user id + nama lengkap saat itu)
+- jenis aksi: jalankan K-Means atau reset hasil
+- jumlah kelompok yang diproses, total siswa yang diklaster
+- rincian per kelompok (nama kelompok, K yang dipakai, jumlah iterasi, jumlah siswa)
+- apakah memakai nilai normalisasi
+- waktu kejadian
 
-**3. K tetap 3 untuk Guru**
-- Fungsi penentu K dibuat mengembalikan 3 untuk role guru, mengabaikan `DEFAULT_K` dan hasil Elbow otomatis. Jadi tombol "Jalankan K-Means" pada akun guru selalu menjalankan K = 3 untuk semua kelas/jurusan, dengan label 3 tingkat (Tinggi / Sedang / Rendah) sesuai skala label yang sudah ada.
+Aturan akses:
+- Guru dan admin boleh menambah baris log untuk dirinya sendiri.
+- Hanya admin yang boleh melihat semua log.
+- Tidak ada yang bisa mengubah atau menghapus log (log bersifat permanen), kecuali admin boleh menghapus untuk membersihkan riwayat lama.
 
-**4. Normalisasi otomatis aktif**
-- Nilai awal `showNormalized` di-set `true` saat role guru, dan switch "Tampilkan nilai normalisasi" disembunyikan agar tampilan tetap konsisten (admin masih bisa mengganti).
+**2. Pencatatan otomatis di halaman Klasterisasi**
 
-**5. Elemen lain**
-- Tombol Reset, filter Kelompok Kelas, filter Klaster, dan Export Excel tetap tersedia untuk guru (tidak diminta dihapus). Teks pengantar di atas halaman disesuaikan untuk guru: alur data mentah → normalisasi Min-Max → K-Means (K = 3), tanpa menyebut Elbow.
+Setelah proses K-Means selesai sukses, dan setelah tombol Reset, aplikasi menulis satu baris log. Kegagalan tidak dicatat sebagai sukses. Pencatatan tidak menghalangi alur bila gagal menyimpan log.
+
+**3. Halaman baru `/admin/logs` — "Log Klasterisasi"**
+
+Hanya untuk admin (rute diproteksi `requireRole="admin"`), muncul di grup Admin pada sidebar dengan ikon riwayat.
+
+Isi halaman:
+- Ringkasan atas: total aksi, jumlah guru yang aktif menjalankan, waktu aksi terakhir.
+- Filter: berdasarkan pengguna, jenis aksi, dan rentang tanggal.
+- Tabel: Waktu | Nama Pengguna | Aksi | Jumlah Kelompok | Total Siswa | Normalisasi | Detail.
+- Baris bisa dibuka untuk melihat rincian per kelompok (kelompok, K, iterasi, jumlah siswa).
+- Tombol Export Excel untuk log yang sedang tampil.
+- Tombol hapus log lama (opsional, dengan konfirmasi).
 
 ## Catatan teknis
 
-- Perhitungan Elbow (`elbowByGroup`) tidak perlu dijalankan pada akun guru sehingga halaman lebih ringan.
-- Hasil disimpan seperti biasa ke tabel hasil klaster dengan `k_used = 3` dan label sesuai K = 3.
-- Tidak ada perubahan database maupun aturan akses.
+- Butuh satu migrasi database untuk tabel `clustering_logs` beserta GRANT dan kebijakan akses.
+- Nama pengguna diambil dari tabel profil saat pencatatan agar log tetap terbaca meski profil berubah.
+- File baru: `src/pages/AdminLogs.tsx`; perubahan pada `src/App.tsx`, `src/components/AppSidebar.tsx`, dan `src/pages/Clustering.tsx`.
