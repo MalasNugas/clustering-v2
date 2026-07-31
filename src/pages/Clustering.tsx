@@ -182,6 +182,8 @@ export default function Clustering() {
         label: string;
       }[] = [];
       let processed = 0;
+      const logDetails: ClusteringLogDetail[] = [];
+
 
       // Perhitungan dilakukan TERPISAH untuk setiap kelas + jurusan
       for (const j of jurusan as any[]) {
