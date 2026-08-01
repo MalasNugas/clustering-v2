@@ -341,8 +341,8 @@ export default function Clustering() {
         "No",
         "Nama",
         "Jurusan",
-        ...feats.map((f) => FEATURE_LABEL[f]),
-        ...feats.map((f) => `${FEATURE_LABEL[f]} (Norm)`),
+        ...feats.map((f) => f.nama),
+        ...feats.map((f) => `${f.nama} (Norm)`),
         "Klaster",
         "Keterangan",
       ];
@@ -392,8 +392,8 @@ export default function Clustering() {
       <h2 className="text-2xl font-bold mb-1">Klasterisasi K-Means</h2>
       <p className="text-sm text-muted-foreground mb-6">
         {isAdmin
-          ? "Alur: data mentah → normalisasi Min-Max → K-Means → penentuan K optimal dengan Elbow Method, dihitung terpisah untuk KELAS 10 dan KELAS 11."
-          : "Alur: data mentah → normalisasi Min-Max → K-Means dengan K = 3, dihitung terpisah untuk KELAS 10 dan KELAS 11."}
+          ? "Alur: data mentah → normalisasi Min-Max → K-Means → penentuan K optimal dengan Elbow Method, dihitung terpisah untuk setiap kelas dan jurusan."
+          : "Alur: data mentah → normalisasi Min-Max → K-Means dengan K = 3, dihitung terpisah untuk setiap kelas dan jurusan."}
       </p>
 
       <Card className="shadow-sm mb-6">
@@ -509,17 +509,19 @@ export default function Clustering() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Perubahan K</TableHead>
-                    <TableHead className="text-right">WCSS</TableHead>
+                    <TableHead className="text-right">WCSS Sebelum</TableHead>
+                    <TableHead className="text-right">WCSS Sesudah</TableHead>
                     <TableHead className="text-right">% Penurunan</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {el.points.map((p) => (
-                    <TableRow key={p.k} className={p.k === K ? "bg-muted/60 font-medium" : undefined}>
-                      <TableCell>K = {p.k}</TableCell>
-                      <TableCell className="text-right">{p.wcss.toFixed(5)}</TableCell>
+                  {el.transitions.map((p) => (
+                    <TableRow key={p.toK} className={p.toK === K ? "bg-muted/60 font-medium" : undefined}>
+                      <TableCell>K{p.fromK} → K{p.toK}</TableCell>
+                      <TableCell className="text-right">{p.before.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")}</TableCell>
+                      <TableCell className="text-right">{p.after.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")}</TableCell>
                       <TableCell className="text-right">
-                        {p.penurunan === undefined ? "-" : `${p.penurunan.toFixed(2)}%`}
+                        {`${p.penurunan.toFixed(8)}%`}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -572,7 +574,7 @@ export default function Clustering() {
                   <CardTitle className="text-base">Hasil Klasterisasi — {g.nama}</CardTitle>
                   <p className="text-xs text-muted-foreground">
                     K = {getK(g)} · {members.length} siswa · Variabel:{" "}
-                    {feats.map((f) => FEATURE_LABEL[f]).join(", ")}
+                    {feats.map((f) => f.nama).join(", ")}
                   </p>
                 </CardHeader>
                 <CardContent>
@@ -584,7 +586,7 @@ export default function Clustering() {
                           <TableHead>Nama</TableHead>
                           <TableHead>Jurusan</TableHead>
                           {feats.map((f) => (
-                            <TableHead key={f} className="text-center">{FEATURE_LABEL[f]}</TableHead>
+                            <TableHead key={f.id} className="text-center">{f.nama}</TableHead>
                           ))}
                           <TableHead className="text-right sticky right-0 bg-background">Klaster</TableHead>
                         </TableRow>
@@ -601,7 +603,7 @@ export default function Clustering() {
                                 {r.s.jurusan?.nama ?? "-"}
                               </TableCell>
                               {feats.map((f, ci) => (
-                                <TableCell key={f} className="text-center">
+                                <TableCell key={f.id} className="text-center">
                                   {showNormalized ? r.norm[ci].toFixed(3) : Math.round(r.raw[ci])}
                                 </TableCell>
                               ))}
