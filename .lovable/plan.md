@@ -1,42 +1,47 @@
-## Tujuan
+# Samakan Hasil Klasterisasi dengan Perhitungan Manual
 
-Admin bisa melihat riwayat (log) siapa menjalankan atau mereset klasterisasi, kapan, dengan pengaturan apa, dan hasil ringkasnya.
+## Temuan dari file `Hasil_Klasterisasi.xlsx`
 
-## Yang dibangun
+- File hanya berisi **2 kelompok perhitungan**: `KELAS 10` (212 siswa) dan `KELAS 11` (216 siswa) — bukan 14 kelompok kelas+jurusan seperti di website sekarang.
+- Mata pelajaran yang dipakai:
+  - KELAS 10: KODING, BI (Bahasa Inggris), MTK (Matematika), INFOR (Informatika), KEJU (mapel kejuruan sesuai jurusan) — 5 fitur. **Projek IPAS tidak dipakai**, padahal di website sekarang ikut dihitung.
+  - KELAS 11: INFOR (Informatika), KIK (Kreativitas, Inovasi & Kewirausahaan), KEJU (mapel kejuruan) — 3 fitur. Sudah dicocokkan dengan data website (contoh: ADELIN GONO = 81 / 80 / 90, sama persis).
+- K = 3 pada kedua kelas, centroid awal diambil dari 3 siswa pertama pada daftar.
 
-**1. Tabel log baru (`clustering_logs`)**
+## Yang akan diubah
 
-Menyimpan setiap aksi di halaman Klasterisasi:
-- siapa yang menjalankan (user id + nama lengkap saat itu)
-- jenis aksi: jalankan K-Means atau reset hasil
-- jumlah kelompok yang diproses, total siswa yang diklaster
-- rincian per kelompok (nama kelompok, K yang dipakai, jumlah iterasi, jumlah siswa)
-- apakah memakai nilai normalisasi
-- waktu kejadian
+**1. Pengelompokan: dari 14 kelompok menjadi 2 kelompok (KELAS 10 dan KELAS 11)**
 
-Aturan akses:
-- Guru dan admin boleh menambah baris log untuk dirinya sendiri.
-- Hanya admin yang boleh melihat semua log.
-- Tidak ada yang bisa mengubah atau menghapus log (log bersifat permanen), kecuali admin boleh menghapus untuk membersihkan riwayat lama.
+Semua siswa dengan nama jurusan berawalan "KLS 10"/"KLAS 10" digabung jadi satu kelompok perhitungan, begitu juga kelas 11. Jurusan tetap tersimpan dan tetap ditampilkan sebagai kolom informasi di tabel hasil, tetapi K-Means dijalankan sekali per kelas.
 
-**2. Pencatatan otomatis di halaman Klasterisasi**
+**2. Pemilihan mata pelajaran mengikuti file**
 
-Setelah proses K-Means selesai sukses, dan setelah tombol Reset, aplikasi menulis satu baris log. Kegagalan tidak dicatat sebagai sukses. Pencatatan tidak menghalangi alur bila gagal menyimpan log.
+- Kelas 10: Koding, Bahasa Inggris, Matematika, Informatika, dan mapel kejuruan (Dasar-dasar <jurusan>). Projek IPAS dikeluarkan.
+- Kelas 11: Informatika, KIK, dan mapel kejuruan.
+- Mapel kejuruan tiap jurusan disamakan menjadi satu kolom fitur "KEJURUAN", supaya siswa lintas jurusan bisa dihitung dalam satu matriks.
+- Beberapa jurusan kelas 11 (DPIB, TESHA, TJKT, TKR) tidak punya nilai Informatika. Nilai yang kosong diisi rata-rata kolom pada kelompoknya (bukan 0), agar tidak merusak normalisasi Min-Max.
 
-**3. Halaman baru `/admin/logs` — "Log Klasterisasi"**
+**3. Alur perhitungan tetap seperti sekarang** (sesuai pilihan Anda)
 
-Hanya untuk admin (rute diproteksi `requireRole="admin"`), muncul di grup Admin pada sidebar dengan ikon riwayat.
+Data mentah → normalisasi Min-Max per kolom dalam kelompok → K-Means K = 3 → penamaan Tinggi/Sedang/Rendah berdasarkan rata-rata nilai asli. Elbow Method tetap ada untuk admin, tapi kini hanya 2 grafik (KELAS 10 & KELAS 11).
 
-Isi halaman:
-- Ringkasan atas: total aksi, jumlah guru yang aktif menjalankan, waktu aksi terakhir.
-- Filter: berdasarkan pengguna, jenis aksi, dan rentang tanggal.
-- Tabel: Waktu | Nama Pengguna | Aksi | Jumlah Kelompok | Total Siswa | Normalisasi | Detail.
-- Baris bisa dibuka untuk melihat rincian per kelompok (kelompok, K, iterasi, jumlah siswa).
-- Tombol Export Excel untuk log yang sedang tampil.
-- Tombol hapus log lama (opsional, dengan konfirmasi).
+**4. Centroid awal dibuat sama dengan file**
+
+Centroid awal memakai 3 siswa pertama (urutan nama) di tiap kelas, dinormalisasi, menggantikan pemilihan otomatis sebaran tertinggi/tengah/terendah. Hasil jadi deterministik dan sejalan dengan langkah manual.
+
+**5. Tampilan & ekspor menyesuaikan**
+
+- Filter "Kelompok Kelas" berisi KELAS 10 dan KELAS 11.
+- Tabel hasil menampilkan kolom Jurusan agar sebaran per jurusan tetap terbaca.
+- Ekspor Excel menghasilkan 2 sheet + sheet Elbow.
+- Log klasterisasi mencatat 2 kelompok.
+
+## Catatan penting
+
+Karena Anda memilih tetap memakai normalisasi Min-Max sementara file manual menghitung dengan nilai mentah, komposisi anggota klaster **bisa masih sedikit berbeda** dari file. Yang akan sama persis adalah struktur perhitungan (2 kelas, mapel yang dipakai, K = 3, centroid awal). Kalau nanti ingin benar-benar identik baris per baris, langkah berikutnya adalah mematikan normalisasi untuk perhitungan (tetap ditampilkan sebagai informasi).
 
 ## Catatan teknis
 
-- Butuh satu migrasi database untuk tabel `clustering_logs` beserta GRANT dan kebijakan akses.
-- Nama pengguna diambil dari tabel profil saat pencatatan agar log tetap terbaca meski profil berubah.
-- File baru: `src/pages/AdminLogs.tsx`; perubahan pada `src/App.tsx`, `src/components/AppSidebar.tsx`, dan `src/pages/Clustering.tsx`.
+- Perubahan utama di `src/pages/Clustering.tsx` (pembentukan kelompok per kelas, pemetaan fitur, centroid awal), plus `src/lib/kmeans.ts` (parameter centroid awal sudah didukung).
+- Konfigurasi mapel yang dipakai (`dipakai_klaster`) di database disesuaikan: Projek IPAS kelas 10 dinonaktifkan, Informatika kelas 11 diaktifkan.
+- Tidak ada perubahan struktur tabel; hanya penyesuaian data konfigurasi mapel dan logika di frontend.
