@@ -197,14 +197,41 @@ export default function Clustering() {
 
   const getK = (g: KelasGroup) => (isAdmin ? kByGroup[g.key] ?? DEFAULT_K[g.key] ?? 3 : 3);
 
+  const targetGroups = useMemo(
+    () => kelasGroups.filter((g) => kelompokFilter === "all" || g.key === kelompokFilter),
+    [kelasGroups, kelompokFilter]
+  );
+
+  const targetSiswaIds = (groups: KelasGroup[]) =>
+    (siswa as any[])
+      .filter((s) => s.jurusan_id && groups.some((g) => g.jurusanIds.has(s.jurusan_id)))
+      .map((s) => s.id);
+
+  const deleteHasil = async (groups: KelasGroup[]) => {
+    if (kelompokFilter === "all") {
+      return supabase.from("hasil_klaster").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    }
+    const ids = targetSiswaIds(groups);
+    if (ids.length === 0) return { error: null } as any;
+    for (let i = 0; i < ids.length; i += 300) {
+      const { error } = await supabase.from("hasil_klaster").delete().in("siswa_id", ids.slice(i, i + 300));
+      if (error) throw error;
+    }
+    return { error: null } as any;
+  };
+
   const runClustering = async () => {
     if (siswa.length === 0 || mapel.length === 0 || nilai.length === 0) {
       toast.error("Data belum lengkap. Silakan import data terlebih dahulu.");
       return;
     }
+    if (targetGroups.length === 0) {
+      toast.error("Kelompok kelas tidak ditemukan.");
+      return;
+    }
     setRunning(true);
     try {
-      await supabase.from("hasil_klaster").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await deleteHasil(targetGroups);
 
       const allInsert: {
         siswa_id: string;
@@ -217,8 +244,8 @@ export default function Clustering() {
       let processed = 0;
       const logDetails: ClusteringLogDetail[] = [];
 
-      // Perhitungan dilakukan TERPISAH untuk KELAS 10 dan KELAS 11
-      for (const g of kelasGroups) {
+      // Perhitungan dilakukan TERPISAH per kelompok kelas
+      for (const g of targetGroups) {
         const { members, feats, raw, normalized } = groupData(g);
         const K = getK(g);
         if (members.length < K || feats.length === 0) continue;
@@ -277,7 +304,11 @@ export default function Clustering() {
         details: logDetails,
       });
 
-      toast.success(`Klasterisasi selesai untuk ${processed} kelompok kelas!`);
+      toast.success(
+        kelompokFilter === "all"
+          ? `Klasterisasi selesai untuk ${processed} kelompok kelas (${allInsert.length} siswa)!`
+          : `Klasterisasi selesai untuk ${targetGroups[0].nama} (${allInsert.length} siswa)!`
+      );
       refetchHasil();
       queryClient.invalidateQueries({ queryKey: ["hasil-klaster"] });
     } catch (err: any) {
@@ -288,18 +319,32 @@ export default function Clustering() {
   };
 
   const handleReset = async () => {
-    const removed = (hasilKlaster as any[]).length;
-    await supabase.from("hasil_klaster").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-    await logClustering({
-      action: "reset",
-      groupCount: 0,
-      studentCount: removed,
-      normalized: showNormalized,
-      details: [],
-    });
-    refetchHasil();
-    toast.success("Hasil klasterisasi direset");
+    try {
+      const ids = new Set(targetSiswaIds(targetGroups));
+      const removed =
+        kelompokFilter === "all"
+          ? (hasilKlaster as any[]).length
+          : (hasilKlaster as any[]).filter((h) => ids.has(h.siswa_id)).length;
+      await deleteHasil(targetGroups);
+      await logClustering({
+        action: "reset",
+        groupCount: 0,
+        studentCount: removed,
+        normalized: showNormalized,
+        details: kelompokFilter === "all" ? [] : [{ kelompok: targetGroups[0]?.nama ?? "-", k: 0, iterasi: 0, siswa: removed }],
+      });
+      refetchHasil();
+      queryClient.invalidateQueries({ queryKey: ["hasil-klaster"] });
+      toast.success(
+        kelompokFilter === "all"
+          ? "Hasil klasterisasi direset"
+          : `Hasil klasterisasi ${targetGroups[0]?.nama ?? ""} direset`
+      );
+    } catch (err: any) {
+      toast.error("Gagal reset: " + (err.message || "Unknown error"));
+    }
   };
+
 
   const hasilBySiswa = new Map((hasilKlaster as any[]).map((h) => [h.siswa_id, h]));
 
