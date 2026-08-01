@@ -17,6 +17,14 @@ import { clusterLabel, labelClass } from "@/lib/labels";
 import { useUserRole } from "@/hooks/useUserRole";
 import { logClustering, ClusteringLogDetail } from "@/lib/clusteringLog";
 import {
+  FEATURES_BY_KELAS,
+  FEATURE_LABEL,
+  FeatureKey,
+  featureOf,
+  imputeColumnMean,
+  kelasOf,
+} from "@/lib/features";
+import {
   Line,
   LineChart,
   ResponsiveContainer,
@@ -29,23 +37,19 @@ import * as XLSX from "xlsx";
 
 const K_MAX = 6;
 
-// K optimal hasil pengujian Elbow pada perhitungan manual (bisa diubah manual di UI)
+/** K pada perhitungan manual: 3 untuk kedua kelas */
 const DEFAULT_K: Record<string, number> = {
-  "KLS 10 DKV": 4,
-  "KLS 10 DPIB": 3,
-  "KLS 10 TESHA": 3,
-  "KLS 10 TJKT": 3,
-  "KLS 10 TKP": 2,
-  "KLS 10 TKR 1": 3,
-  "KLS 10 TKR 2": 3,
-  "KLS 11 DKV": 3,
-  "KLS 11 DPIB": 4,
-  "KLS 11 TESHA": 3,
-  "KLS 11 TJKT": 4,
-  "KLS 11 TKP": 2,
-  "KLS 11 TKR 1": 5,
-  "KLS 11 TKR 2": 3,
+  "10": 3,
+  "11": 3,
 };
+
+type KelasKey = "10" | "11";
+
+interface KelasGroup {
+  key: KelasKey;
+  nama: string;
+  jurusanIds: Set<string>;
+}
 
 export default function Clustering() {
   const queryClient = useQueryClient();
@@ -120,49 +124,78 @@ export default function Clustering() {
     return m;
   }, [nilai]);
 
-  const featureMapel = (jurusanId: string) =>
-    (mapel as any[]).filter((m) => m.jurusan_id === jurusanId && m.dipakai_klaster);
+  // mapel per jurusan per variabel (KODING, BING, MTK, INFOR, KIK, KEJURUAN)
+  const mapelByJurusanFeature = useMemo(() => {
+    const m = new Map<string, Map<FeatureKey, string[]>>();
+    for (const mp of mapel as any[]) {
+      if (!mp.jurusan_id) continue;
+      const f = featureOf(mp.nama);
+      if (!f) continue;
+      if (!m.has(mp.jurusan_id)) m.set(mp.jurusan_id, new Map());
+      const inner = m.get(mp.jurusan_id)!;
+      inner.set(f, [...(inner.get(f) ?? []), mp.id]);
+    }
+    return m;
+  }, [mapel]);
 
-  const groupData = (jurusanId: string) => {
-    const jSiswa = (siswa as any[]).filter((s) => s.jurusan_id === jurusanId);
-    const feats = featureMapel(jurusanId);
-    const raw = jSiswa.map((s) => feats.map((m) => nilaiBySiswa.get(s.id)?.[m.id] ?? 0));
+  // Dua kelompok perhitungan: KELAS 10 dan KELAS 11
+  const kelasGroups = useMemo<KelasGroup[]>(() => {
+    const map = new Map<KelasKey, KelasGroup>();
+    for (const j of jurusan as any[]) {
+      const k = kelasOf(j.nama);
+      if (!k) continue;
+      if (!map.has(k)) map.set(k, { key: k, nama: `KELAS ${k}`, jurusanIds: new Set() });
+      map.get(k)!.jurusanIds.add(j.id);
+    }
+    return Array.from(map.values()).sort((a, b) => a.key.localeCompare(b.key));
+  }, [jurusan]);
+
+  const groupData = (g: KelasGroup) => {
+    const members = (siswa as any[]).filter((s) => s.jurusan_id && g.jurusanIds.has(s.jurusan_id));
+    const feats = FEATURES_BY_KELAS[g.key];
+    const rawNullable: (number | null)[][] = members.map((s) => {
+      const nl = nilaiBySiswa.get(s.id) ?? {};
+      const perJur = mapelByJurusanFeature.get(s.jurusan_id) ?? new Map<FeatureKey, string[]>();
+      return feats.map((f) => {
+        const ids = perJur.get(f) ?? [];
+        const vals = ids.map((id) => nl[id]).filter((v) => v !== undefined && v !== null) as number[];
+        if (vals.length === 0) return null;
+        return vals.reduce((a, b) => a + b, 0) / vals.length;
+      });
+    });
+    const raw = imputeColumnMean(rawNullable);
     const normalized = minMaxNormalize(raw);
-    return { jSiswa, feats, raw, normalized };
+    return { members, feats, raw, normalized };
   };
 
-  // Pengujian Elbow Method per kelompok (K=1..6) — hanya untuk admin
+  /** Centroid awal = 3 siswa pertama pada daftar (mengikuti perhitungan manual) */
+  const initialCentroids = (normalized: number[][], k: number) =>
+    normalized.slice(0, k).map((r) => [...r]);
+
+  // Pengujian Elbow Method per kelas (K=1..6) — hanya untuk admin
   const elbowByGroup = useMemo(() => {
     const out = new Map<string, ElbowResult>();
     if (!isAdmin) return out;
-    for (const j of jurusan as any[]) {
-      const { jSiswa, feats, normalized } = groupData(j.id);
-      if (jSiswa.length < 2 || feats.length === 0) continue;
-      const dp: DataPoint[] = jSiswa.map((s: any, i: number) => ({ id: s.id, values: normalized[i] }));
-      out.set(j.id, runElbow(dp, K_MAX));
+    for (const g of kelasGroups) {
+      const { members, feats, normalized } = groupData(g);
+      if (members.length < 2 || feats.length === 0) continue;
+      const dp: DataPoint[] = members.map((s: any, i: number) => ({ id: s.id, values: normalized[i] }));
+      out.set(g.key, runElbow(dp, K_MAX));
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jurusan, siswa, mapel, nilai, isAdmin]);
+  }, [kelasGroups, siswa, mapel, nilai, isAdmin]);
 
-  // Nilai awal K tiap kelompok: hasil pengujian manual, fallback ke Elbow otomatis
   useEffect(() => {
-    if (!isAdmin) return;
-    if ((jurusan as any[]).length === 0 || elbowByGroup.size === 0) return;
+    if (!isAdmin || kelasGroups.length === 0) return;
     setKByGroup((prev) => {
       const next = { ...prev };
-      for (const j of jurusan as any[]) {
-        if (next[j.id]) continue;
-        next[j.id] = DEFAULT_K[j.nama] ?? elbowByGroup.get(j.id)?.optimalK ?? 3;
-      }
+      for (const g of kelasGroups) if (!next[g.key]) next[g.key] = DEFAULT_K[g.key] ?? 3;
       return next;
     });
-  }, [jurusan, elbowByGroup, isAdmin]);
+  }, [kelasGroups, isAdmin]);
 
-  const getK = (j: any) =>
-    isAdmin
-      ? kByGroup[j.id] ?? DEFAULT_K[j.nama] ?? elbowByGroup.get(j.id)?.optimalK ?? 3
-      : 3;
+  const getK = (g: KelasGroup) => (isAdmin ? kByGroup[g.key] ?? DEFAULT_K[g.key] ?? 3 : 3);
 
   const runClustering = async () => {
     if (siswa.length === 0 || mapel.length === 0 || nilai.length === 0) {
@@ -184,19 +217,23 @@ export default function Clustering() {
       let processed = 0;
       const logDetails: ClusteringLogDetail[] = [];
 
+      // Perhitungan dilakukan TERPISAH untuk KELAS 10 dan KELAS 11
+      for (const g of kelasGroups) {
+        const { members, feats, raw, normalized } = groupData(g);
+        const K = getK(g);
+        if (members.length < K || feats.length === 0) continue;
 
-      // Perhitungan dilakukan TERPISAH untuk setiap kelas + jurusan
-      for (const j of jurusan as any[]) {
-        const { jSiswa, feats, raw, normalized } = groupData(j.id);
-        const K = getK(j);
-        if (jSiswa.length < K || feats.length === 0) continue;
-
-        const dataPoints: DataPoint[] = jSiswa.map((s: any, i: number) => ({
+        const dataPoints: DataPoint[] = members.map((s: any, i: number) => ({
           id: s.id,
           values: normalized[i],
         }));
 
-        const { results, iterations } = kMeans(dataPoints, K, 100);
+        const { results, iterations } = kMeans(
+          dataPoints,
+          K,
+          100,
+          initialCentroids(normalized, K)
+        );
 
         // Urutkan klaster: rata-rata nilai ASLI tertinggi = Klaster 1
         const avgByCluster = new Map<number, number>();
@@ -212,19 +249,19 @@ export default function Clustering() {
         const remap = new Map<number, number>();
         ranked.forEach(([c], i) => remap.set(c, i + 1));
 
-        for (const r of results) {
+        results.forEach((r, i) => {
           const cl = remap.get(r.cluster) ?? r.cluster;
           allInsert.push({
             siswa_id: r.id,
             klaster: cl,
             iterasi: iterations,
-            jurusan_id: j.id,
+            jurusan_id: members[i].jurusan_id,
             k_used: K,
             label: clusterLabel(cl, K),
           });
-        }
+        });
         processed++;
-        logDetails.push({ kelompok: j.nama, k: K, iterasi: iterations, siswa: jSiswa.length });
+        logDetails.push({ kelompok: g.nama, k: K, iterasi: iterations, siswa: members.length });
       }
 
       for (let i = 0; i < allInsert.length; i += 500) {
@@ -275,54 +312,54 @@ export default function Clustering() {
 
     // Sheet ringkasan pengujian Elbow
     const elbowRows: any[][] = [["Kelompok", "K", "WCSS", "% Penurunan", "K Optimal"]];
-    for (const j of jurusan as any[]) {
-      const el = elbowByGroup.get(j.id);
+    for (const g of kelasGroups) {
+      const el = elbowByGroup.get(g.key);
       if (!el) continue;
       for (const p of el.points) {
         elbowRows.push([
-          j.nama,
+          g.nama,
           p.k,
           Number(p.wcss.toFixed(6)),
           p.penurunan === undefined ? "" : Number(p.penurunan.toFixed(4)),
-          getK(j),
+          getK(g),
         ]);
       }
     }
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(elbowRows), "Pengujian Elbow");
 
-    for (const j of jurusan as any[]) {
-      const { jSiswa, feats, raw, normalized } = groupData(j.id);
-      if (jSiswa.length === 0 || feats.length === 0) continue;
+    for (const g of kelasGroups) {
+      const { members, feats, raw, normalized } = groupData(g);
+      if (members.length === 0 || feats.length === 0) continue;
       const header = [
         "No",
         "Nama",
-        "Kelas",
-        ...feats.map((m: any) => m.nama),
-        ...feats.map((m: any) => `${m.nama} (Norm)`),
+        "Jurusan",
+        ...feats.map((f) => FEATURE_LABEL[f]),
+        ...feats.map((f) => `${FEATURE_LABEL[f]} (Norm)`),
         "Klaster",
         "Keterangan",
       ];
-      const rows = jSiswa.map((s: any, i: number) => {
+      const rows = members.map((s: any, i: number) => {
         const h = hasilBySiswa.get(s.id);
         return [
           i + 1,
           s.nama,
-          j.nama,
-          ...raw[i],
+          s.jurusan?.nama ?? "",
+          ...raw[i].map((v) => Number(v.toFixed(2))),
           ...normalized[i].map((v) => Number(v.toFixed(4))),
           h?.klaster ?? "",
-          h?.label ?? (h ? clusterLabel(h.klaster, h.k_used ?? getK(j)) : ""),
+          h?.label ?? (h ? clusterLabel(h.klaster, h.k_used ?? getK(g)) : ""),
         ];
       });
       const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
-      XLSX.utils.book_append_sheet(wb, ws, j.nama.substring(0, 31));
+      XLSX.utils.book_append_sheet(wb, ws, g.nama.substring(0, 31));
     }
     XLSX.writeFile(wb, `Hasil_Klasterisasi_${new Date().toISOString().slice(0, 10)}.xlsx`);
     toast.success("Berhasil mengekspor hasil klasterisasi");
   };
 
-  const visibleJurusan = (jurusan as any[]).filter(
-    (j) => kelompokFilter === "all" || j.id === kelompokFilter
+  const visibleGroups = kelasGroups.filter(
+    (g) => kelompokFilter === "all" || g.key === kelompokFilter
   );
 
   const labelSummary = useMemo(() => {
@@ -348,8 +385,8 @@ export default function Clustering() {
       <h2 className="text-2xl font-bold mb-1">Klasterisasi K-Means</h2>
       <p className="text-sm text-muted-foreground mb-6">
         {isAdmin
-          ? "Alur: data mentah → normalisasi Min-Max → K-Means → penentuan K optimal dengan Elbow Method, dihitung terpisah untuk setiap kelas & jurusan."
-          : "Alur: data mentah → normalisasi Min-Max → K-Means dengan K = 3, dihitung terpisah untuk setiap kelas & jurusan."}
+          ? "Alur: data mentah → normalisasi Min-Max → K-Means → penentuan K optimal dengan Elbow Method, dihitung terpisah untuk KELAS 10 dan KELAS 11."
+          : "Alur: data mentah → normalisasi Min-Max → K-Means dengan K = 3, dihitung terpisah untuk KELAS 10 dan KELAS 11."}
       </p>
 
       <Card className="shadow-sm mb-6">
@@ -368,8 +405,8 @@ export default function Clustering() {
                 <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Semua Kelompok</SelectItem>
-                  {(jurusan as any[]).map((j) => (
-                    <SelectItem key={j.id} value={j.id}>{j.nama}</SelectItem>
+                  {kelasGroups.map((g) => (
+                    <SelectItem key={g.key} value={g.key}>{g.nama}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -406,16 +443,16 @@ export default function Clustering() {
         </CardContent>
       </Card>
 
-      {/* Pengujian Elbow Method per kelompok (khusus admin) */}
-      {isAdmin && visibleJurusan.map((j) => {
-        const el = elbowByGroup.get(j.id);
+      {/* Pengujian Elbow Method per kelas (khusus admin) */}
+      {isAdmin && visibleGroups.map((g) => {
+        const el = elbowByGroup.get(g.key);
         if (!el) return null;
-        const K = getK(j);
+        const K = getK(g);
         return (
-          <Card key={`elbow-${j.id}`} className="shadow-sm mb-6">
+          <Card key={`elbow-${g.key}`} className="shadow-sm mb-6">
             <CardHeader className="flex flex-row items-start justify-between gap-4">
               <div>
-                <CardTitle className="text-base">Pengujian Elbow Method — {j.nama}</CardTitle>
+                <CardTitle className="text-base">Pengujian Elbow Method — {g.nama}</CardTitle>
                 <p className="text-xs text-muted-foreground mt-1">
                   WCSS dihitung untuk K=1 sampai K={K_MAX}. Titik siku menunjukkan K optimal
                   (otomatis: K={el.optimalK}).
@@ -425,7 +462,7 @@ export default function Clustering() {
                 <Label>K Optimal</Label>
                 <Select
                   value={String(K)}
-                  onValueChange={(v) => setKByGroup((p) => ({ ...p, [j.id]: Number(v) }))}
+                  onValueChange={(v) => setKByGroup((p) => ({ ...p, [g.key]: Number(v) }))}
                 >
                   <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -500,10 +537,10 @@ export default function Clustering() {
             ))}
           </div>
 
-          {visibleJurusan.map((j) => {
-            const { jSiswa, feats, raw, normalized } = groupData(j.id);
-            if (jSiswa.length === 0 || feats.length === 0) return null;
-            const rows = jSiswa
+          {visibleGroups.map((g) => {
+            const { members, feats, raw, normalized } = groupData(g);
+            if (members.length === 0 || feats.length === 0) return null;
+            const rows = members
               .map((s: any, i: number) => ({ s, raw: raw[i], norm: normalized[i] }))
               .filter(
                 (r) =>
@@ -519,11 +556,12 @@ export default function Clustering() {
             if (rows.length === 0) return null;
 
             return (
-              <Card key={j.id} className="shadow-sm mb-6">
+              <Card key={g.key} className="shadow-sm mb-6">
                 <CardHeader>
-                  <CardTitle className="text-base">Hasil Klasterisasi — {j.nama}</CardTitle>
+                  <CardTitle className="text-base">Hasil Klasterisasi — {g.nama}</CardTitle>
                   <p className="text-xs text-muted-foreground">
-                    K = {getK(j)} · Variabel: {feats.map((m: any) => m.nama).join(", ")}
+                    K = {getK(g)} · {members.length} siswa · Variabel:{" "}
+                    {feats.map((f) => FEATURE_LABEL[f]).join(", ")}
                   </p>
                 </CardHeader>
                 <CardContent>
@@ -533,8 +571,9 @@ export default function Clustering() {
                         <TableRow>
                           <TableHead className="w-12">No</TableHead>
                           <TableHead>Nama</TableHead>
-                          {feats.map((m: any) => (
-                            <TableHead key={m.id} className="text-center">{m.nama}</TableHead>
+                          <TableHead>Jurusan</TableHead>
+                          {feats.map((f) => (
+                            <TableHead key={f} className="text-center">{FEATURE_LABEL[f]}</TableHead>
                           ))}
                           <TableHead className="text-right sticky right-0 bg-background">Klaster</TableHead>
                         </TableRow>
@@ -542,14 +581,17 @@ export default function Clustering() {
                       <TableBody>
                         {rows.map((r, i) => {
                           const h = hasilBySiswa.get(r.s.id);
-                          const lab = h?.label ?? (h ? clusterLabel(h.klaster, h.k_used ?? getK(j)) : null);
+                          const lab = h?.label ?? (h ? clusterLabel(h.klaster, h.k_used ?? getK(g)) : null);
                           return (
                             <TableRow key={r.s.id}>
                               <TableCell>{i + 1}</TableCell>
                               <TableCell className="font-medium">{r.s.nama}</TableCell>
-                              {feats.map((m: any, ci: number) => (
-                                <TableCell key={m.id} className="text-center">
-                                  {showNormalized ? r.norm[ci].toFixed(3) : r.raw[ci]}
+                              <TableCell className="text-muted-foreground text-xs">
+                                {r.s.jurusan?.nama ?? "-"}
+                              </TableCell>
+                              {feats.map((f, ci) => (
+                                <TableCell key={f} className="text-center">
+                                  {showNormalized ? r.norm[ci].toFixed(3) : Math.round(r.raw[ci])}
                                 </TableCell>
                               ))}
                               <TableCell className="text-right sticky right-0 bg-background">
@@ -557,7 +599,6 @@ export default function Clustering() {
                                   <Badge className={labelClass(lab ?? "")} title={lab ?? undefined}>
                                     Klaster {h.klaster}
                                   </Badge>
-
                                 ) : (
                                   "-"
                                 )}
