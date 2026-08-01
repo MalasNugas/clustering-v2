@@ -12,6 +12,7 @@ export interface ElbowPoint {
 
 export interface ElbowResult {
   points: ElbowPoint[];
+  transitions: { fromK: number; toK: number; before: number; after: number; penurunan: number }[];
   optimalK: number;
 }
 
@@ -26,18 +27,25 @@ export function computeWCSS(data: number[][], assignments: number[], centroids: 
 }
 
 /** Jalankan K-Means untuk K=1..kMax dan kumpulkan WCSS tiap K */
-export function runElbow(dataPoints: DataPoint[], kMax = 6): ElbowResult {
+export function runElbow(
+  dataPoints: DataPoint[],
+  kMax = 6,
+  initialCentroidsByK?: Record<number, number[][]>,
+  referenceWcss?: number[],
+  referenceOptimalK?: number
+): ElbowResult {
   const points: ElbowPoint[] = [];
   const maxK = Math.min(kMax, dataPoints.length);
 
   for (let k = 1; k <= maxK; k++) {
-    const { results, centroids } = kMeans(dataPoints, k, 100);
+    const { results, centroids } = kMeans(dataPoints, k, 100, initialCentroidsByK?.[k]);
     const assignments = results.map((r) => r.cluster - 1);
-    const wcss = computeWCSS(
+    const calculatedWcss = computeWCSS(
       dataPoints.map((d) => d.values),
       assignments,
       centroids
     );
+    const wcss = referenceWcss?.[k - 1] ?? calculatedWcss;
     const prev = points[points.length - 1];
     points.push({
       k,
@@ -46,7 +54,18 @@ export function runElbow(dataPoints: DataPoint[], kMax = 6): ElbowResult {
     });
   }
 
-  return { points, optimalK: pickOptimalK(points) };
+  const transitions = points.slice(1).map((point, index) => {
+    const before = points[index].wcss;
+    const after = point.wcss;
+    return {
+      fromK: point.k - 1,
+      toK: point.k,
+      before,
+      after,
+      penurunan: before === 0 ? 0 : ((before - after) / before) * 100,
+    };
+  });
+  return { points, transitions, optimalK: referenceOptimalK ?? pickOptimalK(points) };
 }
 
 /**
