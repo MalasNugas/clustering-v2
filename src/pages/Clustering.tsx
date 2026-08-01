@@ -119,9 +119,20 @@ export default function Clustering() {
 
   const groupData = (g: KelasGroup) => {
     const members = (siswa as any[]).filter((s) => s.jurusan_id === g.jurusanId);
+    const featureOrder = (name: string) => {
+      const n = name.toUpperCase();
+      if (n.includes("KODING")) return 1;
+      if (n.includes("BAHASA INGGRIS")) return 2;
+      if (n.startsWith("MATEMATIKA") || n === "MTK") return 3;
+      if (n.includes("PROJEK IPAS") || n.includes("PROJECT IPAS")) return 4;
+      if (n.startsWith("INFORMATIKA") || n === "INFOR") return 5;
+      if (n.includes("KREATIVITAS") || n === "KIK") return 1;
+      return 9;
+    };
     const feats = (mapel as any[])
       .filter((mp) => mp.jurusan_id === g.jurusanId && mp.dipakai_klaster)
-      .filter((mp) => members.some((s) => nilaiBySiswa.get(s.id)?.[mp.id] !== undefined));
+      .filter((mp) => members.some((s) => nilaiBySiswa.get(s.id)?.[mp.id] !== undefined))
+      .sort((a, b) => featureOrder(a.nama) - featureOrder(b.nama));
     const raw = members.map((s) => {
       const nl = nilaiBySiswa.get(s.id) ?? {};
       return feats.map((mp) => nl[mp.id] ?? 0);
@@ -318,16 +329,17 @@ export default function Clustering() {
     const wb = XLSX.utils.book_new();
 
     // Sheet ringkasan pengujian Elbow
-    const elbowRows: any[][] = [["Kelompok", "K", "WCSS", "% Penurunan", "K Optimal"]];
+    const elbowRows: any[][] = [["Kelompok", "Perubahan K", "WCSS Sebelum", "WCSS Sesudah", "% Penurunan", "K Optimal"]];
     for (const g of kelasGroups) {
       const el = elbowByGroup.get(g.key);
       if (!el) continue;
-      for (const p of el.points) {
+      for (const p of el.transitions) {
         elbowRows.push([
           g.nama,
-          p.k,
-          Number(p.wcss.toFixed(6)),
-          p.penurunan === undefined ? "" : Number(p.penurunan.toFixed(4)),
+          `K${p.fromK} → K${p.toK}`,
+          p.before,
+          p.after,
+          Number(p.penurunan.toFixed(8)),
           getK(g),
         ]);
       }
