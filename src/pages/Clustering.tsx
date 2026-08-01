@@ -442,7 +442,11 @@ export default function Clustering() {
           <div className="flex flex-wrap gap-4 items-end">
             <Button onClick={runClustering} disabled={running}>
               <Play className="mr-2 h-4 w-4" />
-              {running ? "Memproses..." : isAdmin ? "Jalankan K-Means" : "Jalankan K-Means (K = 3)"}
+              {running
+                ? "Memproses..."
+                : `${isAdmin ? "Jalankan K-Means" : "Jalankan K-Means (K = 3)"}${
+                    kelompokFilter === "all" ? "" : ` — ${targetGroups[0]?.nama ?? kelompokFilter}`
+                  }`}
             </Button>
             <div className="space-y-1.5">
               <Label>Kelompok Kelas</Label>
