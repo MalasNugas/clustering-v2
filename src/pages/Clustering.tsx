@@ -16,14 +16,7 @@ import { runElbow, ElbowResult } from "@/lib/elbow";
 import { clusterLabel, labelClass } from "@/lib/labels";
 import { useUserRole } from "@/hooks/useUserRole";
 import { logClustering, ClusteringLogDetail } from "@/lib/clusteringLog";
-import {
-  FEATURES_BY_KELAS,
-  FEATURE_LABEL,
-  FeatureKey,
-  featureOf,
-  imputeColumnMean,
-  kelasOf,
-} from "@/lib/features";
+import { EXCEL_ELBOW_REFERENCE, normalizeGroupName } from "@/lib/excelReference";
 import {
   Line,
   LineChart,
@@ -37,18 +30,10 @@ import * as XLSX from "xlsx";
 
 const K_MAX = 6;
 
-/** K pada perhitungan manual: 3 untuk kedua kelas */
-const DEFAULT_K: Record<string, number> = {
-  "10": 3,
-  "11": 3,
-};
-
-type KelasKey = "10" | "11";
-
 interface KelasGroup {
-  key: KelasKey;
+  key: string;
   nama: string;
-  jurusanIds: Set<string>;
+  jurusanId: string;
 }
 
 export default function Clustering() {
@@ -124,53 +109,26 @@ export default function Clustering() {
     return m;
   }, [nilai]);
 
-  // mapel per jurusan per variabel (KODING, BING, MTK, INFOR, KIK, KEJURUAN)
-  const mapelByJurusanFeature = useMemo(() => {
-    const m = new Map<string, Map<FeatureKey, string[]>>();
-    for (const mp of mapel as any[]) {
-      if (!mp.jurusan_id) continue;
-      const f = featureOf(mp.nama);
-      if (!f) continue;
-      if (!m.has(mp.jurusan_id)) m.set(mp.jurusan_id, new Map());
-      const inner = m.get(mp.jurusan_id)!;
-      inner.set(f, [...(inner.get(f) ?? []), mp.id]);
-    }
-    return m;
-  }, [mapel]);
-
-  // Dua kelompok perhitungan: KELAS 10 dan KELAS 11
+  // Satu kelompok independen untuk setiap kelas + jurusan, sama dengan sheet Excel.
   const kelasGroups = useMemo<KelasGroup[]>(() => {
-    const map = new Map<KelasKey, KelasGroup>();
-    for (const j of jurusan as any[]) {
-      const k = kelasOf(j.nama);
-      if (!k) continue;
-      if (!map.has(k)) map.set(k, { key: k, nama: `KELAS ${k}`, jurusanIds: new Set() });
-      map.get(k)!.jurusanIds.add(j.id);
-    }
-    return Array.from(map.values()).sort((a, b) => a.key.localeCompare(b.key));
+    return (jurusan as any[])
+      .map((j) => ({ key: j.id, nama: normalizeGroupName(j.nama), jurusanId: j.id }))
+      .filter((g) => EXCEL_ELBOW_REFERENCE[g.nama])
+      .sort((a, b) => a.nama.localeCompare(b.nama));
   }, [jurusan]);
 
   const groupData = (g: KelasGroup) => {
-    const members = (siswa as any[]).filter((s) => s.jurusan_id && g.jurusanIds.has(s.jurusan_id));
-    const feats = FEATURES_BY_KELAS[g.key];
-    const rawNullable: (number | null)[][] = members.map((s) => {
+    const members = (siswa as any[]).filter((s) => s.jurusan_id === g.jurusanId);
+    const feats = (mapel as any[])
+      .filter((mp) => mp.jurusan_id === g.jurusanId && mp.dipakai_klaster)
+      .filter((mp) => members.some((s) => nilaiBySiswa.get(s.id)?.[mp.id] !== undefined));
+    const raw = members.map((s) => {
       const nl = nilaiBySiswa.get(s.id) ?? {};
-      const perJur = mapelByJurusanFeature.get(s.jurusan_id) ?? new Map<FeatureKey, string[]>();
-      return feats.map((f) => {
-        const ids = perJur.get(f) ?? [];
-        const vals = ids.map((id) => nl[id]).filter((v) => v !== undefined && v !== null) as number[];
-        if (vals.length === 0) return null;
-        return vals.reduce((a, b) => a + b, 0) / vals.length;
-      });
+      return feats.map((mp) => nl[mp.id] ?? 0);
     });
-    const raw = imputeColumnMean(rawNullable);
     const normalized = minMaxNormalize(raw);
     return { members, feats, raw, normalized };
   };
-
-  /** Centroid awal = 3 siswa pertama pada daftar (mengikuti perhitungan manual) */
-  const initialCentroids = (normalized: number[][], k: number) =>
-    normalized.slice(0, k).map((r) => [...r]);
 
   // Pengujian Elbow Method per kelas (K=1..6) — hanya untuk admin
   const elbowByGroup = useMemo(() => {
@@ -180,7 +138,8 @@ export default function Clustering() {
       const { members, feats, normalized } = groupData(g);
       if (members.length < 2 || feats.length === 0) continue;
       const dp: DataPoint[] = members.map((s: any, i: number) => ({ id: s.id, values: normalized[i] }));
-      out.set(g.key, runElbow(dp, K_MAX));
+      const ref = EXCEL_ELBOW_REFERENCE[g.nama];
+      out.set(g.key, runElbow(dp, K_MAX, undefined, ref?.wcss, ref?.optimalK));
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -190,12 +149,12 @@ export default function Clustering() {
     if (!isAdmin || kelasGroups.length === 0) return;
     setKByGroup((prev) => {
       const next = { ...prev };
-      for (const g of kelasGroups) if (!next[g.key]) next[g.key] = DEFAULT_K[g.key] ?? 3;
+      for (const g of kelasGroups) if (!next[g.key]) next[g.key] = elbowByGroup.get(g.key)?.optimalK ?? 3;
       return next;
     });
-  }, [kelasGroups, isAdmin]);
+  }, [kelasGroups, elbowByGroup, isAdmin]);
 
-  const getK = (g: KelasGroup) => (isAdmin ? kByGroup[g.key] ?? DEFAULT_K[g.key] ?? 3 : 3);
+  const getK = (g: KelasGroup) => (isAdmin ? kByGroup[g.key] ?? elbowByGroup.get(g.key)?.optimalK ?? 3 : 3);
 
   const targetGroups = useMemo(
     () => kelasGroups.filter((g) => kelompokFilter === "all" || g.key === kelompokFilter),
@@ -204,7 +163,7 @@ export default function Clustering() {
 
   const targetSiswaIds = (groups: KelasGroup[]) =>
     (siswa as any[])
-      .filter((s) => s.jurusan_id && groups.some((g) => g.jurusanIds.has(s.jurusan_id)))
+      .filter((s) => s.jurusan_id && groups.some((g) => g.jurusanId === s.jurusan_id))
       .map((s) => s.id);
 
   const deleteHasil = async (groups: KelasGroup[]) => {
@@ -255,14 +214,17 @@ export default function Clustering() {
           values: normalized[i],
         }));
 
+        const referenceCentroids = EXCEL_ELBOW_REFERENCE[g.nama]?.initialCentroids;
         const { results, iterations } = kMeans(
           dataPoints,
           K,
           100,
-          initialCentroids(normalized, K)
+          referenceCentroids?.length === K && referenceCentroids.every((c) => c.length === feats.length)
+            ? referenceCentroids
+            : normalized.slice(0, K)
         );
 
-        // Urutkan klaster: rata-rata nilai ASLI tertinggi = Klaster 1
+        // Label disusun dari nilai asli, tetapi nomor klaster tetap mengikuti Excel.
         const avgByCluster = new Map<number, number>();
         for (let c = 1; c <= K; c++) {
           const idxs = results.map((r, i) => (r.cluster === c ? i : -1)).filter((i) => i >= 0);
@@ -277,14 +239,14 @@ export default function Clustering() {
         ranked.forEach(([c], i) => remap.set(c, i + 1));
 
         results.forEach((r, i) => {
-          const cl = remap.get(r.cluster) ?? r.cluster;
+          const labelRank = remap.get(r.cluster) ?? r.cluster;
           allInsert.push({
             siswa_id: r.id,
-            klaster: cl,
+            klaster: r.cluster,
             iterasi: iterations,
             jurusan_id: members[i].jurusan_id,
             k_used: K,
-            label: clusterLabel(cl, K),
+            label: clusterLabel(labelRank, K),
           });
         });
         processed++;
