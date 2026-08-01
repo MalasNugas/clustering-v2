@@ -463,7 +463,7 @@ export default function Clustering() {
             {(hasilKlaster as any[]).length > 0 && (
               <>
                 <Button variant="outline" onClick={handleReset}>
-                  <RotateCcw className="mr-2 h-4 w-4" /> Reset
+                  <RotateCcw className="mr-2 h-4 w-4" /> {kelompokFilter === "all" ? "Reset" : `Reset ${targetGroups[0]?.nama ?? ""}`}
                 </Button>
                 <Button variant="secondary" onClick={handleExport}>
                   <Download className="mr-2 h-4 w-4" /> Export Excel
