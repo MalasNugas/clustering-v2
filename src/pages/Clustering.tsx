@@ -235,31 +235,23 @@ export default function Clustering() {
             : normalized.slice(0, K)
         );
 
-        // Label disusun dari nilai asli, tetapi nomor klaster tetap mengikuti Excel.
-        const avgByCluster = new Map<number, number>();
-        for (let c = 1; c <= K; c++) {
-          const idxs = results.map((r, i) => (r.cluster === c ? i : -1)).filter((i) => i >= 0);
-          if (idxs.length === 0) continue;
-          const avg =
-            idxs.reduce((s, i) => s + raw[i].reduce((a, b) => a + b, 0) / (raw[i].length || 1), 0) /
-            idxs.length;
-          avgByCluster.set(c, avg);
-        }
-        const ranked = Array.from(avgByCluster.entries()).sort((a, b) => b[1] - a[1]);
-        const remap = new Map<number, number>();
-        ranked.forEach(([c], i) => remap.set(c, i + 1));
+        // Nomor klaster mengikuti hasil perhitungan manual di Excel bila tersedia.
+        const excelMap = excelClusterMap(g.nama, K);
 
         results.forEach((r, i) => {
-          const labelRank = remap.get(r.cluster) ?? r.cluster;
+          const fromExcel = excelMap?.get(normalizeSiswaName(members[i].nama));
+          const klaster = fromExcel ?? r.cluster;
           allInsert.push({
             siswa_id: r.id,
-            klaster: r.cluster,
+            klaster,
             iterasi: iterations,
             jurusan_id: members[i].jurusan_id,
             k_used: K,
-            label: clusterLabel(labelRank, K),
+            // Penamaan label mengikuti dokumen PENAMAAN_LABEL.docx
+            label: excelLabel(g.nama, K, klaster) ?? clusterLabel(klaster, K),
           });
         });
+
         processed++;
         logDetails.push({ kelompok: g.nama, k: K, iterasi: iterations, siswa: members.length });
       }
