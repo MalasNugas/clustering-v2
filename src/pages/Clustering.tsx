@@ -17,6 +17,8 @@ import { clusterLabel, labelClass } from "@/lib/labels";
 import { useUserRole } from "@/hooks/useUserRole";
 import { logClustering, ClusteringLogDetail } from "@/lib/clusteringLog";
 import { EXCEL_ELBOW_REFERENCE, normalizeGroupName } from "@/lib/excelReference";
+import { excelClusterMap, normalizeSiswaName } from "@/lib/excelClusters";
+import { excelLabel } from "@/lib/excelLabels";
 import {
   Line,
   LineChart,
