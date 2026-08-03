@@ -361,7 +361,7 @@ export default function Clustering() {
           ...raw[i].map((v) => Number(v.toFixed(2))),
           ...normalized[i].map((v) => Number(v.toFixed(4))),
           h?.klaster ?? "",
-          h?.label ?? (h ? clusterLabel(h.klaster, h.k_used ?? getK(g)) : ""),
+          h?.label ?? (h ? excelLabel(g.nama, h.k_used ?? getK(g), h.klaster) ?? clusterLabel(h.klaster, h.k_used ?? getK(g)) : ""),
         ];
       });
       const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
@@ -600,7 +600,7 @@ export default function Clustering() {
                       <TableBody>
                         {rows.map((r, i) => {
                           const h = hasilBySiswa.get(r.s.id);
-                          const lab = h?.label ?? (h ? clusterLabel(h.klaster, h.k_used ?? getK(g)) : null);
+                          const lab = h?.label ?? (h ? excelLabel(g.nama, h.k_used ?? getK(g), h.klaster) ?? clusterLabel(h.klaster, h.k_used ?? getK(g)) : null);
                           return (
                             <TableRow key={r.s.id}>
                               <TableCell>{i + 1}</TableCell>
