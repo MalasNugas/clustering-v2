@@ -214,13 +214,18 @@ export default function Clustering() {
         label: string;
       }[] = [];
       let processed = 0;
+      const skipped: string[] = [];
       const logDetails: ClusteringLogDetail[] = [];
 
       // Perhitungan dilakukan TERPISAH per kelompok kelas
       for (const g of targetGroups) {
         const { members, feats, raw, normalized } = groupData(g);
         const K = getK(g);
-        if (members.length < K || feats.length === 0) continue;
+        if (members.length < K || feats.length === 0) {
+          skipped.push(g.nama);
+          continue;
+        }
+
 
         const dataPoints: DataPoint[] = members.map((s: any, i: number) => ({
           id: s.id,
