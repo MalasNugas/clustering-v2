@@ -278,9 +278,13 @@ export default function Clustering() {
 
       toast.success(
         kelompokFilter === "all"
-          ? `Klasterisasi selesai untuk ${processed} kelompok kelas (${allInsert.length} siswa)!`
+          ? `Klasterisasi selesai untuk ${processed} dari ${targetGroups.length} kelompok kelas (${allInsert.length} siswa)!`
           : `Klasterisasi selesai untuk ${targetGroups[0].nama} (${allInsert.length} siswa)!`
       );
+      if (skipped.length > 0) {
+        toast.warning(`Kelompok dilewati (data belum lengkap): ${skipped.join(", ")}`);
+      }
+
       refetchHasil();
       queryClient.invalidateQueries({ queryKey: ["hasil-klaster"] });
     } catch (err: any) {
