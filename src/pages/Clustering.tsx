@@ -214,13 +214,18 @@ export default function Clustering() {
         label: string;
       }[] = [];
       let processed = 0;
+      const skipped: string[] = [];
       const logDetails: ClusteringLogDetail[] = [];
 
       // Perhitungan dilakukan TERPISAH per kelompok kelas
       for (const g of targetGroups) {
         const { members, feats, raw, normalized } = groupData(g);
         const K = getK(g);
-        if (members.length < K || feats.length === 0) continue;
+        if (members.length < K || feats.length === 0) {
+          skipped.push(g.nama);
+          continue;
+        }
+
 
         const dataPoints: DataPoint[] = members.map((s: any, i: number) => ({
           id: s.id,
@@ -273,9 +278,13 @@ export default function Clustering() {
 
       toast.success(
         kelompokFilter === "all"
-          ? `Klasterisasi selesai untuk ${processed} kelompok kelas (${allInsert.length} siswa)!`
+          ? `Klasterisasi selesai untuk ${processed} dari ${targetGroups.length} kelompok kelas (${allInsert.length} siswa)!`
           : `Klasterisasi selesai untuk ${targetGroups[0].nama} (${allInsert.length} siswa)!`
       );
+      if (skipped.length > 0) {
+        toast.warning(`Kelompok dilewati (data belum lengkap): ${skipped.join(", ")}`);
+      }
+
       refetchHasil();
       queryClient.invalidateQueries({ queryKey: ["hasil-klaster"] });
     } catch (err: any) {
@@ -574,15 +583,37 @@ export default function Clustering() {
               });
             if (rows.length === 0) return null;
 
+            const kUsed = hasilBySiswa.get(members[0]?.id)?.k_used ?? getK(g);
+            const refMap = excelClusterMap(g.nama, kUsed);
+            const cocok = refMap
+              ? members.filter(
+                  (s: any) =>
+                    hasilBySiswa.get(s.id)?.klaster === refMap.get(normalizeSiswaName(s.nama))
+                ).length
+              : 0;
+
             return (
               <Card key={g.key} className="shadow-sm mb-6">
                 <CardHeader>
-                  <CardTitle className="text-base">Hasil Klasterisasi — {g.nama}</CardTitle>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <CardTitle className="text-base">Hasil Klasterisasi — {g.nama}</CardTitle>
+                    {refMap && (
+                      <Badge
+                        variant={cocok === members.length ? "default" : "secondary"}
+                        title="Perbandingan nomor klaster terhadap perhitungan manual Excel"
+                      >
+                        {cocok === members.length
+                          ? `Sesuai Excel (${cocok}/${members.length})`
+                          : `Sesuai Excel ${cocok}/${members.length}`}
+                      </Badge>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    K = {getK(g)} · {members.length} siswa · Variabel:{" "}
+                    K = {kUsed} · {members.length} siswa · Variabel:{" "}
                     {feats.map((f) => f.nama).join(", ")}
                   </p>
                 </CardHeader>
+
                 <CardContent>
                   <div className="overflow-auto max-h-[500px]">
                     <Table>
