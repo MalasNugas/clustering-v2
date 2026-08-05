@@ -572,6 +572,13 @@ export default function Clustering() {
               </Card>
             ))}
           </div>
+          {kelompokFilter === "all" && (
+            <p className="text-xs text-muted-foreground -mt-4 mb-6">
+              Ringkasan mencakup seluruh kelompok kelas dengan K optimal masing-masing, sehingga
+              jumlah label bisa lebih banyak dari K satu kelompok.
+            </p>
+          )}
+
 
           {visibleGroups.map((g) => {
             const { members, feats, raw, normalized } = groupData(g);
