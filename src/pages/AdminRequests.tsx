@@ -109,54 +109,64 @@ export default function AdminRequests() {
           {isLoading ? (
             <p className="text-muted-foreground text-sm">Memuat...</p>
           ) : data.length === 0 ? (
-            <p className="text-muted-foreground text-sm">Belum ada akun guru.</p>
+            <p className="text-muted-foreground text-sm">
+              Belum ada akun guru yang terdaftar, atau daftar tidak dapat dimuat.
+            </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nama Guru</TableHead>
-                  <TableHead>Diajukan</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-center">Akses Master Data</TableHead>
-                  <TableHead className="text-right">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.map((r) => (
-                  <TableRow key={r.user_id}>
-                    <TableCell className="font-medium">{r.nama_lengkap ?? r.user_id}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {r.requested_at ? new Date(r.requested_at).toLocaleString("id-ID") : "-"}
-                    </TableCell>
-                    <TableCell>{statusBadge(r.status)}</TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <Switch
-                          checked={r.status === "approved"}
-                          onCheckedChange={(on) => setStatus(r, on ? "approved" : "revoked")}
-                          aria-label="Aktifkan akses Master Data"
-                        />
-                        <span className="text-xs text-muted-foreground w-8 text-left">
-                          {r.status === "approved" ? "ON" : "OFF"}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right space-x-2">
-                      {r.status === "pending" && (
-                        <>
-                          <Button size="sm" onClick={() => setStatus(r, "approved")}>
-                            <Check className="h-4 w-4 mr-1" /> Setujui
-                          </Button>
-                          <Button size="sm" variant="destructive" onClick={() => setStatus(r, "rejected")}>
-                            <X className="h-4 w-4 mr-1" /> Tolak
-                          </Button>
-                        </>
-                      )}
-                    </TableCell>
+            <div className="w-full overflow-x-auto">
+              <Table className="min-w-[720px]">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nama Guru</TableHead>
+                    <TableHead className="w-[170px]">Akses Master Data</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Diajukan</TableHead>
+                    <TableHead className="text-right">Aksi</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {data.map((r) => (
+                    <TableRow key={r.user_id}>
+                      <TableCell className="font-medium">{r.nama_lengkap ?? r.user_id}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={r.status === "approved"}
+                            onCheckedChange={(on) => setStatus(r, on ? "approved" : "revoked")}
+                            aria-label="Aktifkan akses Master Data"
+                            title="Aktifkan atau nonaktifkan akses Master Data"
+                          />
+                          <span
+                            className={
+                              "text-xs font-semibold w-8 " +
+                              (r.status === "approved" ? "text-primary" : "text-muted-foreground")
+                            }
+                          >
+                            {r.status === "approved" ? "ON" : "OFF"}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>{statusBadge(r.status)}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {r.requested_at ? new Date(r.requested_at).toLocaleString("id-ID") : "-"}
+                      </TableCell>
+                      <TableCell className="text-right space-x-2">
+                        {r.status === "pending" && (
+                          <>
+                            <Button size="sm" onClick={() => setStatus(r, "approved")}>
+                              <Check className="h-4 w-4 mr-1" /> Setujui
+                            </Button>
+                            <Button size="sm" variant="destructive" onClick={() => setStatus(r, "rejected")}>
+                              <X className="h-4 w-4 mr-1" /> Tolak
+                            </Button>
+                          </>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
