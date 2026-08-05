@@ -15,7 +15,10 @@ export function MasterDataAccessBanner() {
   const requestAccess = async () => {
     const { error } = await supabase
       .from("master_data_access_requests")
-      .insert({ user_id: user.id, status: "pending" });
+      .upsert(
+        { user_id: user.id, status: "pending", requested_at: new Date().toISOString(), reviewed_at: null },
+        { onConflict: "user_id" }
+      );
     if (error) toast.error("Gagal mengirim permintaan: " + error.message);
     else {
       toast.success("Permintaan akses terkirim. Menunggu persetujuan Admin.");
@@ -34,12 +37,16 @@ export function MasterDataAccessBanner() {
               ? "Permintaan akses Anda sedang menunggu persetujuan Admin."
               : accessRequestStatus === "rejected"
               ? "Permintaan sebelumnya ditolak. Anda dapat mengajukan ulang."
+              : accessRequestStatus === "revoked"
+              ? "Akses Anda dinonaktifkan oleh Admin. Anda dapat mengajukan ulang."
               : "Anda belum memiliki akses. Ajukan permintaan ke Admin untuk mengelola Master Data."}
           </p>
         </div>
         {accessRequestStatus !== "pending" && (
           <Button onClick={requestAccess} size="sm">
-            {accessRequestStatus === "rejected" ? "Ajukan Ulang" : "Minta Akses"}
+            {accessRequestStatus === "rejected" || accessRequestStatus === "revoked"
+              ? "Ajukan Ulang"
+              : "Minta Akses"}
           </Button>
         )}
       </CardContent>
