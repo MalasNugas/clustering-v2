@@ -43,6 +43,7 @@ export function useUserRole() {
       | "pending"
       | "approved"
       | "rejected"
+      | "revoked"
       | undefined;
     setAccessRequestStatus(latest ?? "none");
     setHasMasterDataAccess(primary === "admin" || latest === "approved");
