@@ -15,7 +15,10 @@ export function MasterDataAccessBanner() {
   const requestAccess = async () => {
     const { error } = await supabase
       .from("master_data_access_requests")
-      .insert({ user_id: user.id, status: "pending" });
+      .upsert(
+        { user_id: user.id, status: "pending", requested_at: new Date().toISOString(), reviewed_at: null },
+        { onConflict: "user_id" }
+      );
     if (error) toast.error("Gagal mengirim permintaan: " + error.message);
     else {
       toast.success("Permintaan akses terkirim. Menunggu persetujuan Admin.");
