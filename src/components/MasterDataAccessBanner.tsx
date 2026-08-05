@@ -37,12 +37,16 @@ export function MasterDataAccessBanner() {
               ? "Permintaan akses Anda sedang menunggu persetujuan Admin."
               : accessRequestStatus === "rejected"
               ? "Permintaan sebelumnya ditolak. Anda dapat mengajukan ulang."
+              : accessRequestStatus === "revoked"
+              ? "Akses Anda dinonaktifkan oleh Admin. Anda dapat mengajukan ulang."
               : "Anda belum memiliki akses. Ajukan permintaan ke Admin untuk mengelola Master Data."}
           </p>
         </div>
         {accessRequestStatus !== "pending" && (
           <Button onClick={requestAccess} size="sm">
-            {accessRequestStatus === "rejected" ? "Ajukan Ulang" : "Minta Akses"}
+            {accessRequestStatus === "rejected" || accessRequestStatus === "revoked"
+              ? "Ajukan Ulang"
+              : "Minta Akses"}
           </Button>
         )}
       </CardContent>
