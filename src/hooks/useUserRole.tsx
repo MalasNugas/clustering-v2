@@ -9,7 +9,7 @@ export function useUserRole() {
   const [role, setRole] = useState<AppRole | null>(null);
   const [hasMasterDataAccess, setHasMasterDataAccess] = useState(false);
   const [accessRequestStatus, setAccessRequestStatus] = useState<
-    "none" | "pending" | "approved" | "rejected"
+    "none" | "pending" | "approved" | "rejected" | "revoked"
   >("none");
   const [loading, setLoading] = useState(true);
 
