@@ -385,8 +385,14 @@ export default function Clustering() {
   );
 
   const labelSummary = useMemo(() => {
+    const visibleIds = new Set(
+      (siswa as any[])
+        .filter((s) => s.jurusan_id && visibleGroups.some((g) => g.jurusanId === s.jurusan_id))
+        .map((s) => s.id)
+    );
     const m = new Map<string, number>();
     for (const h of hasilKlaster as any[]) {
+      if (!visibleIds.has(h.siswa_id)) continue;
       const lab = h.label ?? clusterLabel(h.klaster, h.k_used ?? 3);
       m.set(lab, (m.get(lab) ?? 0) + 1);
     }
@@ -399,8 +405,10 @@ export default function Clustering() {
       "Rendah",
       "Sangat Rendah",
     ];
-    return order.filter((l) => m.has(l)).map((l) => ({ label: l, count: m.get(l)! }));
-  }, [hasilKlaster]);
+    return order.filter((l) => (m.get(l) ?? 0) > 0).map((l) => ({ label: l, count: m.get(l)! }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasilKlaster, siswa, kelompokFilter, kelasGroups]);
+
 
   return (
     <div>
@@ -564,6 +572,13 @@ export default function Clustering() {
               </Card>
             ))}
           </div>
+          {kelompokFilter === "all" && (
+            <p className="text-xs text-muted-foreground -mt-4 mb-6">
+              Ringkasan mencakup seluruh kelompok kelas dengan K optimal masing-masing, sehingga
+              jumlah label bisa lebih banyak dari K satu kelompok.
+            </p>
+          )}
+
 
           {visibleGroups.map((g) => {
             const { members, feats, raw, normalized } = groupData(g);
