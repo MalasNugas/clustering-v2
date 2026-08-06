@@ -313,11 +313,13 @@ export default function Clustering() {
         if (error) throw error;
       }
 
+      const tahunLog = Array.from(new Set(logDetails.map((d) => d.tahunAjaran ?? "-"))).join(", ");
       await logClustering({
         action: "run",
         groupCount: processed,
         studentCount: allInsert.length,
         normalized: showNormalized,
+        tahunAjaran: tahunLog || undefined,
         details: logDetails,
       });
 
