@@ -436,9 +436,8 @@ export default function Clustering() {
     toast.success("Berhasil mengekspor hasil klasterisasi");
   };
 
-  const visibleGroups = kelasGroups.filter(
-    (g) => kelompokFilter === "all" || g.key === kelompokFilter
-  );
+  const visibleGroups = targetGroups;
+
 
   const labelSummary = useMemo(() => {
     const visibleIds = new Set(
