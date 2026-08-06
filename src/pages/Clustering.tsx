@@ -462,7 +462,7 @@ export default function Clustering() {
     ];
     return order.filter((l) => (m.get(l) ?? 0) > 0).map((l) => ({ label: l, count: m.get(l)! }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasilKlaster, siswa, kelompokFilter, kelasGroups]);
+  }, [hasilKlaster, siswa, kelompokFilter, tahunFilter, kelasGroups]);
 
 
   return (
