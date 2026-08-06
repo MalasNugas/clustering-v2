@@ -124,13 +124,29 @@ export default function Clustering() {
     return m;
   }, [nilai]);
 
-  // Satu kelompok independen untuk setiap kelas + jurusan, sama dengan sheet Excel.
+  // Satu kelompok independen untuk setiap kelas + jurusan + tahun ajaran.
   const kelasGroups = useMemo<KelasGroup[]>(() => {
     return (jurusan as any[])
-      .map((j) => ({ key: j.id, nama: normalizeGroupName(j.nama), jurusanId: j.id }))
-      .filter((g) => EXCEL_ELBOW_REFERENCE[g.nama])
-      .sort((a, b) => a.nama.localeCompare(b.nama));
+      .map((j) => {
+        const nama = normalizeGroupName(j.nama);
+        const { kelas, jurusan: jur } = splitGroupName(nama);
+        return {
+          key: j.id,
+          nama,
+          jurusanId: j.id,
+          tahunAjaran: j.tahun_ajaran ?? "-",
+          kelas,
+          jurusanNama: jur,
+        } as KelasGroup;
+      })
+      .sort((a, b) => b.tahunAjaran.localeCompare(a.tahunAjaran) || a.nama.localeCompare(b.nama));
   }, [jurusan]);
+
+  const tahunOptions = useMemo(
+    () => Array.from(new Set(kelasGroups.map((g) => g.tahunAjaran))).sort().reverse(),
+    [kelasGroups]
+  );
+
 
   const groupData = (g: KelasGroup) => {
     const members = (siswa as any[]).filter((s) => s.jurusan_id === g.jurusanId);
