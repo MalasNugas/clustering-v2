@@ -489,17 +489,40 @@ export default function Clustering() {
                   }`}
             </Button>
             <div className="space-y-1.5">
-              <Label>Kelompok Kelas</Label>
+              <Label htmlFor="tahun-ajaran">Tahun Ajaran</Label>
+              <Select
+                value={tahunFilter}
+                onValueChange={(v) => {
+                  setTahunFilter(v);
+                  setKelompokFilter("all");
+                }}
+              >
+                <SelectTrigger id="tahun-ajaran" className="w-44" aria-label="Filter tahun ajaran">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Tahun Ajaran</SelectItem>
+                  {tahunOptions.map((t) => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="kelompok-kelas">Kelompok Kelas</Label>
               <Select value={kelompokFilter} onValueChange={setKelompokFilter}>
-                <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="kelompok-kelas" className="w-52" aria-label="Filter kelompok kelas">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Semua Kelompok</SelectItem>
-                  {kelasGroups.map((g) => (
+                  {tahunGroups.map((g) => (
                     <SelectItem key={g.key} value={g.key}>{g.nama}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+
             {(hasilKlaster as any[]).length > 0 && (
               <>
                 <Button variant="outline" onClick={handleReset}>
