@@ -200,9 +200,14 @@ export default function Clustering() {
 
   const getK = (g: KelasGroup) => (isAdmin ? kByGroup[g.key] ?? elbowByGroup.get(g.key)?.optimalK ?? 3 : 3);
 
+  const tahunGroups = useMemo(
+    () => kelasGroups.filter((g) => tahunFilter === "all" || g.tahunAjaran === tahunFilter),
+    [kelasGroups, tahunFilter]
+  );
+
   const targetGroups = useMemo(
-    () => kelasGroups.filter((g) => kelompokFilter === "all" || g.key === kelompokFilter),
-    [kelasGroups, kelompokFilter]
+    () => tahunGroups.filter((g) => kelompokFilter === "all" || g.key === kelompokFilter),
+    [tahunGroups, kelompokFilter]
   );
 
   const targetSiswaIds = (groups: KelasGroup[]) =>
@@ -211,9 +216,10 @@ export default function Clustering() {
       .map((s) => s.id);
 
   const deleteHasil = async (groups: KelasGroup[]) => {
-    if (kelompokFilter === "all") {
+    if (groups.length === kelasGroups.length) {
       return supabase.from("hasil_klaster").delete().neq("id", "00000000-0000-0000-0000-000000000000");
     }
+
     const ids = targetSiswaIds(groups);
     if (ids.length === 0) return { error: null } as any;
     for (let i = 0; i < ids.length; i += 300) {
