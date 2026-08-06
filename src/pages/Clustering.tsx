@@ -36,7 +36,20 @@ interface KelasGroup {
   key: string;
   nama: string;
   jurusanId: string;
+  tahunAjaran: string;
+  kelas: string;
+  jurusanNama: string;
 }
+
+/** Pisahkan nama kelompok "KLS 10 TJKT 2025/2026" menjadi kelas dan jurusan. */
+export function splitGroupName(nama: string): { kelas: string; jurusan: string } {
+  const cleaned = nama.replace(/\s*\d{4}\/\d{4}\s*$/, "").trim();
+  const m = cleaned.match(/^(KL[A]?S\s*\d+)\s*(.*)$/i);
+  if (!m) return { kelas: "-", jurusan: cleaned };
+  const kelasNo = m[1].match(/\d+/)?.[0] ?? "-";
+  return { kelas: `Kelas ${kelasNo}`, jurusan: m[2].trim() || "-" };
+}
+
 
 export default function Clustering() {
   const queryClient = useQueryClient();
