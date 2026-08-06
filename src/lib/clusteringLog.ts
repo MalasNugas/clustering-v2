@@ -39,6 +39,7 @@ export async function logClustering(input: LogClusteringInput) {
       group_count: input.groupCount,
       student_count: input.studentCount,
       normalized: input.normalized,
+      tahun_ajaran: input.tahunAjaran ?? null,
       details: input.details as unknown as never,
     });
   } catch {
