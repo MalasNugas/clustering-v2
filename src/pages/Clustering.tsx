@@ -297,7 +297,15 @@ export default function Clustering() {
         });
 
         processed++;
-        logDetails.push({ kelompok: g.nama, k: K, iterasi: iterations, siswa: members.length });
+        logDetails.push({
+          kelompok: g.nama,
+          tahunAjaran: g.tahunAjaran,
+          kelas: g.kelas,
+          jurusan: g.jurusanNama,
+          k: K,
+          iterasi: iterations,
+          siswa: members.length,
+        });
       }
 
       for (let i = 0; i < allInsert.length; i += 500) {
