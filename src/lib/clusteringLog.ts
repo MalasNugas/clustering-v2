@@ -2,6 +2,9 @@ import { supabase } from "@/integrations/supabase/client";
 
 export type ClusteringLogDetail = {
   kelompok: string;
+  tahunAjaran?: string;
+  kelas?: string;
+  jurusan?: string;
   k: number;
   iterasi: number;
   siswa: number;
@@ -12,6 +15,7 @@ export type LogClusteringInput = {
   groupCount: number;
   studentCount: number;
   normalized: boolean;
+  tahunAjaran?: string;
   details: ClusteringLogDetail[];
 };
 
