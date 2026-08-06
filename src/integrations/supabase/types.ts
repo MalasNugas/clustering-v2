@@ -23,6 +23,7 @@ export type Database = {
           id: string
           normalized: boolean
           student_count: number
+          tahun_ajaran: string | null
           user_id: string
           user_nama: string | null
         }
@@ -34,6 +35,7 @@ export type Database = {
           id?: string
           normalized?: boolean
           student_count?: number
+          tahun_ajaran?: string | null
           user_id: string
           user_nama?: string | null
         }
@@ -45,6 +47,7 @@ export type Database = {
           id?: string
           normalized?: boolean
           student_count?: number
+          tahun_ajaran?: string | null
           user_id?: string
           user_nama?: string | null
         }
@@ -96,16 +99,19 @@ export type Database = {
           created_at: string
           id: string
           nama: string
+          tahun_ajaran: string
         }
         Insert: {
           created_at?: string
           id?: string
           nama: string
+          tahun_ajaran?: string
         }
         Update: {
           created_at?: string
           id?: string
           nama?: string
+          tahun_ajaran?: string
         }
         Relationships: []
       }

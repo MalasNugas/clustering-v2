@@ -36,7 +36,20 @@ interface KelasGroup {
   key: string;
   nama: string;
   jurusanId: string;
+  tahunAjaran: string;
+  kelas: string;
+  jurusanNama: string;
 }
+
+/** Pisahkan nama kelompok "KLS 10 TJKT 2025/2026" menjadi kelas dan jurusan. */
+export function splitGroupName(nama: string): { kelas: string; jurusan: string } {
+  const cleaned = nama.replace(/\s*\d{4}\/\d{4}\s*$/, "").trim();
+  const m = cleaned.match(/^(KL[A]?S\s*\d+)\s*(.*)$/i);
+  if (!m) return { kelas: "-", jurusan: cleaned };
+  const kelasNo = m[1].match(/\d+/)?.[0] ?? "-";
+  return { kelas: `Kelas ${kelasNo}`, jurusan: m[2].trim() || "-" };
+}
+
 
 export default function Clustering() {
   const queryClient = useQueryClient();
@@ -44,6 +57,8 @@ export default function Clustering() {
   const [running, setRunning] = useState(false);
   const [klasterFilter, setKlasterFilter] = useState<string>("all");
   const [kelompokFilter, setKelompokFilter] = useState<string>("all");
+  const [tahunFilter, setTahunFilter] = useState<string>("all");
+
   const [showNormalized, setShowNormalized] = useState(false);
   const [kByGroup, setKByGroup] = useState<Record<string, number>>({});
 
@@ -111,13 +126,29 @@ export default function Clustering() {
     return m;
   }, [nilai]);
 
-  // Satu kelompok independen untuk setiap kelas + jurusan, sama dengan sheet Excel.
+  // Satu kelompok independen untuk setiap kelas + jurusan + tahun ajaran.
   const kelasGroups = useMemo<KelasGroup[]>(() => {
     return (jurusan as any[])
-      .map((j) => ({ key: j.id, nama: normalizeGroupName(j.nama), jurusanId: j.id }))
-      .filter((g) => EXCEL_ELBOW_REFERENCE[g.nama])
-      .sort((a, b) => a.nama.localeCompare(b.nama));
+      .map((j) => {
+        const nama = normalizeGroupName(j.nama);
+        const { kelas, jurusan: jur } = splitGroupName(nama);
+        return {
+          key: j.id,
+          nama,
+          jurusanId: j.id,
+          tahunAjaran: j.tahun_ajaran ?? "-",
+          kelas,
+          jurusanNama: jur,
+        } as KelasGroup;
+      })
+      .sort((a, b) => b.tahunAjaran.localeCompare(a.tahunAjaran) || a.nama.localeCompare(b.nama));
   }, [jurusan]);
+
+  const tahunOptions = useMemo(
+    () => Array.from(new Set(kelasGroups.map((g) => g.tahunAjaran))).sort().reverse(),
+    [kelasGroups]
+  );
+
 
   const groupData = (g: KelasGroup) => {
     const members = (siswa as any[]).filter((s) => s.jurusan_id === g.jurusanId);
@@ -169,9 +200,14 @@ export default function Clustering() {
 
   const getK = (g: KelasGroup) => (isAdmin ? kByGroup[g.key] ?? elbowByGroup.get(g.key)?.optimalK ?? 3 : 3);
 
+  const tahunGroups = useMemo(
+    () => kelasGroups.filter((g) => tahunFilter === "all" || g.tahunAjaran === tahunFilter),
+    [kelasGroups, tahunFilter]
+  );
+
   const targetGroups = useMemo(
-    () => kelasGroups.filter((g) => kelompokFilter === "all" || g.key === kelompokFilter),
-    [kelasGroups, kelompokFilter]
+    () => tahunGroups.filter((g) => kelompokFilter === "all" || g.key === kelompokFilter),
+    [tahunGroups, kelompokFilter]
   );
 
   const targetSiswaIds = (groups: KelasGroup[]) =>
@@ -180,9 +216,10 @@ export default function Clustering() {
       .map((s) => s.id);
 
   const deleteHasil = async (groups: KelasGroup[]) => {
-    if (kelompokFilter === "all") {
+    if (groups.length === kelasGroups.length) {
       return supabase.from("hasil_klaster").delete().neq("id", "00000000-0000-0000-0000-000000000000");
     }
+
     const ids = targetSiswaIds(groups);
     if (ids.length === 0) return { error: null } as any;
     for (let i = 0; i < ids.length; i += 300) {
@@ -260,7 +297,15 @@ export default function Clustering() {
         });
 
         processed++;
-        logDetails.push({ kelompok: g.nama, k: K, iterasi: iterations, siswa: members.length });
+        logDetails.push({
+          kelompok: g.nama,
+          tahunAjaran: g.tahunAjaran,
+          kelas: g.kelas,
+          jurusan: g.jurusanNama,
+          k: K,
+          iterasi: iterations,
+          siswa: members.length,
+        });
       }
 
       for (let i = 0; i < allInsert.length; i += 500) {
@@ -268,11 +313,13 @@ export default function Clustering() {
         if (error) throw error;
       }
 
+      const tahunLog = Array.from(new Set(logDetails.map((d) => d.tahunAjaran ?? "-"))).join(", ");
       await logClustering({
         action: "run",
         groupCount: processed,
         studentCount: allInsert.length,
         normalized: showNormalized,
+        tahunAjaran: tahunLog || undefined,
         details: logDetails,
       });
 
@@ -307,7 +354,16 @@ export default function Clustering() {
         groupCount: 0,
         studentCount: removed,
         normalized: showNormalized,
-        details: kelompokFilter === "all" ? [] : [{ kelompok: targetGroups[0]?.nama ?? "-", k: 0, iterasi: 0, siswa: removed }],
+        tahunAjaran: Array.from(new Set(targetGroups.map((g) => g.tahunAjaran))).join(", ") || undefined,
+        details: targetGroups.map((g) => ({
+          kelompok: g.nama,
+          tahunAjaran: g.tahunAjaran,
+          kelas: g.kelas,
+          jurusan: g.jurusanNama,
+          k: 0,
+          iterasi: 0,
+          siswa: 0,
+        })),
       });
       refetchHasil();
       queryClient.invalidateQueries({ queryKey: ["hasil-klaster"] });
@@ -380,9 +436,8 @@ export default function Clustering() {
     toast.success("Berhasil mengekspor hasil klasterisasi");
   };
 
-  const visibleGroups = kelasGroups.filter(
-    (g) => kelompokFilter === "all" || g.key === kelompokFilter
-  );
+  const visibleGroups = targetGroups;
+
 
   const labelSummary = useMemo(() => {
     const visibleIds = new Set(
@@ -407,7 +462,7 @@ export default function Clustering() {
     ];
     return order.filter((l) => (m.get(l) ?? 0) > 0).map((l) => ({ label: l, count: m.get(l)! }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasilKlaster, siswa, kelompokFilter, kelasGroups]);
+  }, [hasilKlaster, siswa, kelompokFilter, tahunFilter, kelasGroups]);
 
 
   return (
@@ -434,17 +489,40 @@ export default function Clustering() {
                   }`}
             </Button>
             <div className="space-y-1.5">
-              <Label>Kelompok Kelas</Label>
+              <Label htmlFor="tahun-ajaran">Tahun Ajaran</Label>
+              <Select
+                value={tahunFilter}
+                onValueChange={(v) => {
+                  setTahunFilter(v);
+                  setKelompokFilter("all");
+                }}
+              >
+                <SelectTrigger id="tahun-ajaran" className="w-44" aria-label="Filter tahun ajaran">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Tahun Ajaran</SelectItem>
+                  {tahunOptions.map((t) => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="kelompok-kelas">Kelompok Kelas</Label>
               <Select value={kelompokFilter} onValueChange={setKelompokFilter}>
-                <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="kelompok-kelas" className="w-52" aria-label="Filter kelompok kelas">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Semua Kelompok</SelectItem>
-                  {kelasGroups.map((g) => (
+                  {tahunGroups.map((g) => (
                     <SelectItem key={g.key} value={g.key}>{g.nama}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+
             {(hasilKlaster as any[]).length > 0 && (
               <>
                 <Button variant="outline" onClick={handleReset}>
