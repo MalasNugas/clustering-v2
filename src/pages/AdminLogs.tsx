@@ -36,7 +36,15 @@ import { ChevronDown, ChevronRight, Download, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 
-type Detail = { kelompok: string; k: number; iterasi: number; siswa: number };
+type Detail = {
+  kelompok: string;
+  tahunAjaran?: string;
+  kelas?: string;
+  jurusan?: string;
+  k: number;
+  iterasi: number;
+  siswa: number;
+};
 
 type LogRow = {
   id: string;
@@ -46,9 +54,23 @@ type LogRow = {
   group_count: number;
   student_count: number;
   normalized: boolean;
+  tahun_ajaran: string | null;
   details: Detail[];
   created_at: string;
 };
+
+const uniq = (arr: (string | undefined)[]) =>
+  Array.from(new Set(arr.filter((v): v is string => !!v && v !== "-")));
+
+const summarize = (values: (string | undefined)[]) => {
+  const u = uniq(values);
+  if (u.length === 0) return "-";
+  if (u.length <= 2) return u.join(", ");
+  return `${u.slice(0, 2).join(", ")} +${u.length - 2}`;
+};
+
+const tahunOf = (r: LogRow) =>
+  r.tahun_ajaran ?? summarize(r.details.map((d) => d.tahunAjaran));
 
 const actionLabel = (a: string) =>
   a === "run" ? "Jalankan K-Means" : a === "reset" ? "Reset Hasil" : a;
@@ -57,6 +79,7 @@ export default function AdminLogs() {
   const qc = useQueryClient();
   const [userFilter, setUserFilter] = useState("all");
   const [actionFilter, setActionFilter] = useState("all");
+  const [tahunFilter, setTahunFilter] = useState("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -86,12 +109,26 @@ export default function AdminLogs() {
     return data.filter((r) => {
       if (userFilter !== "all" && r.user_id !== userFilter) return false;
       if (actionFilter !== "all" && r.action !== actionFilter) return false;
+      if (
+        tahunFilter !== "all" &&
+        !(r.tahun_ajaran === tahunFilter || r.details.some((d) => d.tahunAjaran === tahunFilter))
+      )
+        return false;
       const t = new Date(r.created_at).getTime();
       if (from && t < new Date(from + "T00:00:00").getTime()) return false;
       if (to && t > new Date(to + "T23:59:59").getTime()) return false;
       return true;
     });
-  }, [data, userFilter, actionFilter, from, to]);
+  }, [data, userFilter, actionFilter, tahunFilter, from, to]);
+
+  const tahunOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of data) {
+      if (r.tahun_ajaran) r.tahun_ajaran.split(",").forEach((t) => set.add(t.trim()));
+      for (const d of r.details) if (d.tahunAjaran) set.add(d.tahunAjaran);
+    }
+    return Array.from(set).filter(Boolean).sort().reverse();
+  }, [data]);
 
   const lastAt = data[0]?.created_at;
 
@@ -104,11 +141,17 @@ export default function AdminLogs() {
       Waktu: new Date(r.created_at).toLocaleString("id-ID"),
       Pengguna: r.user_nama ?? r.user_id,
       Aksi: actionLabel(r.action),
+      "Tahun Ajaran": tahunOf(r),
+      Kelas: summarize(r.details.map((d) => d.kelas)),
+      Jurusan: summarize(r.details.map((d) => d.jurusan)),
       "Jumlah Kelompok": r.group_count,
       "Total Siswa": r.student_count,
       Normalisasi: r.normalized ? "Ya" : "Tidak",
       Rincian: r.details
-        .map((d) => `${d.kelompok} (K=${d.k}, ${d.iterasi} iterasi, ${d.siswa} siswa)`)
+        .map(
+          (d) =>
+            `${d.kelompok} [${d.tahunAjaran ?? "-"} | ${d.kelas ?? "-"} | ${d.jurusan ?? "-"}] (K=${d.k}, ${d.iterasi} iterasi, ${d.siswa} siswa)`
+        )
         .join("; "),
     }));
     const wb = XLSX.utils.book_new();
@@ -188,7 +231,7 @@ export default function AdminLogs() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-3 sm:grid-cols-4 mb-4">
+          <div className="grid gap-3 sm:grid-cols-5 mb-4">
             <div>
               <Label className="text-xs">Pengguna</Label>
               <Select value={userFilter} onValueChange={setUserFilter}>
@@ -219,6 +262,22 @@ export default function AdminLogs() {
               </Select>
             </div>
             <div>
+              <Label className="text-xs" htmlFor="filter-tahun">Tahun Ajaran</Label>
+              <Select value={tahunFilter} onValueChange={setTahunFilter}>
+                <SelectTrigger id="filter-tahun" aria-label="Filter tahun ajaran">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua tahun ajaran</SelectItem>
+                  {tahunOptions.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
               <Label className="text-xs">Dari tanggal</Label>
               <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
             </div>
@@ -240,6 +299,9 @@ export default function AdminLogs() {
                   <TableHead>Waktu</TableHead>
                   <TableHead>Nama Pengguna</TableHead>
                   <TableHead>Aksi</TableHead>
+                  <TableHead>Tahun Ajaran</TableHead>
+                  <TableHead>Kelas</TableHead>
+                  <TableHead>Jurusan</TableHead>
                   <TableHead className="text-right">Kelompok</TableHead>
                   <TableHead className="text-right">Total Siswa</TableHead>
                   <TableHead>Normalisasi</TableHead>
@@ -272,18 +334,26 @@ export default function AdminLogs() {
                           <Badge variant="secondary">Reset Hasil</Badge>
                         )}
                       </TableCell>
+                      <TableCell className="whitespace-nowrap">{tahunOf(r)}</TableCell>
+                      <TableCell>{summarize(r.details.map((d) => d.kelas))}</TableCell>
+                      <TableCell>{summarize(r.details.map((d) => d.jurusan))}</TableCell>
                       <TableCell className="text-right">{r.group_count}</TableCell>
                       <TableCell className="text-right">{r.student_count}</TableCell>
                       <TableCell>{r.normalized ? "Ya" : "Tidak"}</TableCell>
                     </TableRow>
                     {expanded === r.id && r.details.length > 0 && (
                       <TableRow key={r.id + "-d"}>
-                        <TableCell colSpan={7} className="bg-muted/40">
+                        <TableCell colSpan={10} className="bg-muted/40">
                           <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3 text-xs py-2">
                             {r.details.map((d, i) => (
                               <div key={i} className="flex justify-between gap-2 border-b py-1">
-                                <span className="font-medium">{d.kelompok}</span>
-                                <span className="text-muted-foreground">
+                                <span className="font-medium">
+                                  {d.kelompok}
+                                  <span className="block text-muted-foreground font-normal">
+                                    {d.tahunAjaran ?? "-"} · {d.kelas ?? "-"} · {d.jurusan ?? "-"}
+                                  </span>
+                                </span>
+                                <span className="text-muted-foreground whitespace-nowrap">
                                   K={d.k} · {d.iterasi} iterasi · {d.siswa} siswa
                                 </span>
                               </div>
