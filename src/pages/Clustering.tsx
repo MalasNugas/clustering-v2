@@ -354,7 +354,16 @@ export default function Clustering() {
         groupCount: 0,
         studentCount: removed,
         normalized: showNormalized,
-        details: kelompokFilter === "all" ? [] : [{ kelompok: targetGroups[0]?.nama ?? "-", k: 0, iterasi: 0, siswa: removed }],
+        tahunAjaran: Array.from(new Set(targetGroups.map((g) => g.tahunAjaran))).join(", ") || undefined,
+        details: targetGroups.map((g) => ({
+          kelompok: g.nama,
+          tahunAjaran: g.tahunAjaran,
+          kelas: g.kelas,
+          jurusan: g.jurusanNama,
+          k: 0,
+          iterasi: 0,
+          siswa: 0,
+        })),
       });
       refetchHasil();
       queryClient.invalidateQueries({ queryKey: ["hasil-klaster"] });
