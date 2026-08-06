@@ -57,6 +57,8 @@ export default function Clustering() {
   const [running, setRunning] = useState(false);
   const [klasterFilter, setKlasterFilter] = useState<string>("all");
   const [kelompokFilter, setKelompokFilter] = useState<string>("all");
+  const [tahunFilter, setTahunFilter] = useState<string>("all");
+
   const [showNormalized, setShowNormalized] = useState(false);
   const [kByGroup, setKByGroup] = useState<Record<string, number>>({});
 
