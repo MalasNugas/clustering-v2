@@ -380,28 +380,33 @@ export default function Clustering() {
 
   const hasilBySiswa = new Map((hasilKlaster as any[]).map((h) => [h.siswa_id, h]));
 
-  /** Centroid akhir per klaster (rata-rata anggota) + jarak tiap siswa ke setiap centroid. */
+  /**
+   * Centroid akhir per klaster dihitung dari rata-rata NILAI MENTAH anggota,
+   * lalu jarak Euclidean (berakar) tiap siswa ke setiap centroid — sama seperti
+   * perhitungan manual di Excel. `nearest` berisi nilai jarak terkecil (angka),
+   * `nearestIdx` nomor centroid terdekat.
+   */
   const groupDistances = (
     members: any[],
-    normalized: number[][],
+    matrix: number[][],
     kUsed: number
-  ): { dists: number[][]; nearest: number[] } => {
-    const dim = normalized[0]?.length ?? 0;
+  ): { dists: number[][]; nearest: number[]; nearestIdx: number[] } => {
+    const dim = matrix[0]?.length ?? 0;
     const centroids: number[][] = Array.from({ length: kUsed }, (_, ci) => {
       const idx = members
         .map((s, i) => (hasilBySiswa.get(s.id)?.klaster === ci + 1 ? i : -1))
         .filter((i) => i >= 0);
       if (idx.length === 0) return new Array(dim).fill(0);
       const sum = new Array(dim).fill(0);
-      for (const i of idx) for (let d = 0; d < dim; d++) sum[d] += normalized[i][d] ?? 0;
+      for (const i of idx) for (let d = 0; d < dim; d++) sum[d] += matrix[i][d] ?? 0;
       return sum.map((v) => v / idx.length);
     });
-    const dists = normalized.map((p) =>
-      centroids.map((c) => Math.sqrt(squaredDistance(p, c)))
-    );
-    const nearest = dists.map((row) => row.indexOf(Math.min(...row)) + 1);
-    return { dists, nearest };
+    const dists = matrix.map((p) => centroids.map((c) => Math.sqrt(squaredDistance(p, c))));
+    const nearest = dists.map((row) => Math.min(...row));
+    const nearestIdx = dists.map((row) => row.indexOf(Math.min(...row)) + 1);
+    return { dists, nearest, nearestIdx };
   };
+
 
   const handleExport = () => {
     if ((hasilKlaster as any[]).length === 0) {
