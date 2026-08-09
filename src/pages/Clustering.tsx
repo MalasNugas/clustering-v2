@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Play, RotateCcw, Download } from "lucide-react";
 import { toast } from "sonner";
-import { kMeans, DataPoint } from "@/lib/kmeans";
+import { kMeans, DataPoint, squaredDistance } from "@/lib/kmeans";
 import { minMaxNormalize } from "@/lib/normalize";
 import { runElbow, ElbowResult } from "@/lib/elbow";
 import { clusterLabel, labelClass } from "@/lib/labels";
