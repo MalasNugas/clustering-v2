@@ -380,40 +380,73 @@ export default function Clustering() {
 
   const hasilBySiswa = new Map((hasilKlaster as any[]).map((h) => [h.siswa_id, h]));
 
+  /** Centroid akhir per klaster (rata-rata anggota) + jarak tiap siswa ke setiap centroid. */
+  const groupDistances = (
+    members: any[],
+    normalized: number[][],
+    kUsed: number
+  ): { dists: number[][]; nearest: number[] } => {
+    const dim = normalized[0]?.length ?? 0;
+    const centroids: number[][] = Array.from({ length: kUsed }, (_, ci) => {
+      const idx = members
+        .map((s, i) => (hasilBySiswa.get(s.id)?.klaster === ci + 1 ? i : -1))
+        .filter((i) => i >= 0);
+      if (idx.length === 0) return new Array(dim).fill(0);
+      const sum = new Array(dim).fill(0);
+      for (const i of idx) for (let d = 0; d < dim; d++) sum[d] += normalized[i][d] ?? 0;
+      return sum.map((v) => v / idx.length);
+    });
+    const dists = normalized.map((p) =>
+      centroids.map((c) => Math.sqrt(squaredDistance(p, c)))
+    );
+    const nearest = dists.map((row) => row.indexOf(Math.min(...row)) + 1);
+    return { dists, nearest };
+  };
+
   const handleExport = () => {
     if ((hasilKlaster as any[]).length === 0) {
       toast.error("Belum ada hasil klasterisasi untuk diekspor");
       return;
     }
+    const groups = targetGroups.length > 0 ? targetGroups : kelasGroups;
     const wb = XLSX.utils.book_new();
 
-    // Sheet ringkasan pengujian Elbow
-    const elbowRows: any[][] = [["Kelompok", "Perubahan K", "WCSS Sebelum", "WCSS Sesudah", "% Penurunan", "K Optimal"]];
-    for (const g of kelasGroups) {
-      const el = elbowByGroup.get(g.key);
-      if (!el) continue;
-      for (const p of el.transitions) {
-        elbowRows.push([
-          g.nama,
-          `K${p.fromK} → K${p.toK}`,
-          p.before,
-          p.after,
-          Number(p.penurunan.toFixed(8)),
-          getK(g),
-        ]);
+    // Sheet ringkasan pengujian Elbow (khusus admin)
+    if (isAdmin) {
+      const elbowRows: any[][] = [["Kelompok", "Perubahan K", "WCSS Sebelum", "WCSS Sesudah", "% Penurunan", "K Optimal"]];
+      for (const g of groups) {
+        const el = elbowByGroup.get(g.key);
+        if (!el) continue;
+        for (const p of el.transitions) {
+          elbowRows.push([
+            g.nama,
+            `K${p.fromK} → K${p.toK}`,
+            p.before,
+            p.after,
+            Number(p.penurunan.toFixed(8)),
+            getK(g),
+          ]);
+        }
+      }
+      if (elbowRows.length > 1) {
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(elbowRows), "Pengujian Elbow");
       }
     }
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(elbowRows), "Pengujian Elbow");
 
-    for (const g of kelasGroups) {
+    let sheets = 0;
+    for (const g of groups) {
       const { members, feats, raw, normalized } = groupData(g);
       if (members.length === 0 || feats.length === 0) continue;
+      const kUsed = hasilBySiswa.get(members[0]?.id)?.k_used ?? getK(g);
+      const { dists, nearest } = groupDistances(members, normalized, kUsed);
       const header = [
         "No",
         "Nama",
         "Jurusan",
         ...feats.map((f) => f.nama),
         ...feats.map((f) => `${f.nama} (Norm)`),
+        ...Array.from({ length: kUsed }, (_, i) => `C${i + 1}`),
+        "Terdekat",
         "Klaster",
         "Keterangan",
       ];
@@ -425,16 +458,30 @@ export default function Clustering() {
           s.jurusan?.nama ?? "",
           ...raw[i].map((v) => Number(v.toFixed(2))),
           ...normalized[i].map((v) => Number(v.toFixed(4))),
+          ...dists[i].map((v) => Number(v.toFixed(6))),
+          nearest[i],
           h?.klaster ?? "",
           h?.label ?? (h ? excelLabel(g.nama, h.k_used ?? getK(g), h.klaster) ?? clusterLabel(h.klaster, h.k_used ?? getK(g)) : ""),
         ];
       });
       const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
       XLSX.utils.book_append_sheet(wb, ws, g.nama.substring(0, 31));
+      sheets++;
     }
-    XLSX.writeFile(wb, `Hasil_Klasterisasi_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    if (sheets === 0) {
+      toast.error("Tidak ada data pada kelompok yang dipilih");
+      return;
+    }
+    const scope =
+      kelompokFilter !== "all"
+        ? groups[0]?.nama.replace(/[\\/:*?[\]]/g, "-")
+        : tahunFilter !== "all"
+        ? tahunFilter.replace("/", "-")
+        : "Semua";
+    XLSX.writeFile(wb, `Hasil_Klasterisasi_${scope}_${new Date().toISOString().slice(0, 10)}.xlsx`);
     toast.success("Berhasil mengekspor hasil klasterisasi");
   };
+
 
   const visibleGroups = targetGroups;
 
