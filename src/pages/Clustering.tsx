@@ -464,7 +464,7 @@ export default function Clustering() {
           ...raw[i].map((v) => Number(v.toFixed(2))),
           ...normalized[i].map((v) => Number(v.toFixed(4))),
           ...dists[i].map((v) => Number(v.toFixed(6))),
-          nearest[i],
+          Number(nearest[i].toFixed(6)),
           h?.klaster ?? "",
           h?.label ?? (h ? excelLabel(g.nama, h.k_used ?? getK(g), h.klaster) ?? clusterLabel(h.klaster, h.k_used ?? getK(g)) : ""),
         ];
