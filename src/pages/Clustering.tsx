@@ -807,15 +807,15 @@ export default function Clustering() {
                                   <TableCell
                                     key={`c${ci}`}
                                     className={`text-center text-xs tabular-nums ${
-                                      dist?.n === ci + 1 ? "font-semibold" : "text-muted-foreground"
+                                      dist?.ni === ci + 1 ? "font-semibold" : "text-muted-foreground"
                                     }`}
                                   >
                                     {dist ? dist.d[ci].toFixed(6) : "-"}
                                   </TableCell>
                                 ))}
                               {isAdmin && (
-                                <TableCell className="text-center text-xs font-medium">
-                                  {dist ? `C${dist.n}` : "-"}
+                                <TableCell className="text-center text-xs font-medium tabular-nums">
+                                  {dist ? dist.n.toFixed(6) : "-"}
                                 </TableCell>
                               )}
                               <TableCell className="text-right sticky right-0 bg-background">
