@@ -729,9 +729,12 @@ export default function Clustering() {
             if (rows.length === 0) return null;
 
             const kUsed = hasilBySiswa.get(members[0]?.id)?.k_used ?? getK(g);
-            const { dists, nearest } = groupDistances(members, normalized, kUsed);
-            const distById = new Map<string, { d: number[]; n: number }>(
-              members.map((s: any, i: number) => [s.id, { d: dists[i], n: nearest[i] }])
+            const { dists, nearest, nearestIdx } = groupDistances(members, raw, kUsed);
+            const distById = new Map<string, { d: number[]; n: number; ni: number }>(
+              members.map((s: any, i: number) => [
+                s.id,
+                { d: dists[i], n: nearest[i], ni: nearestIdx[i] },
+              ])
             );
             const refMap = excelClusterMap(g.nama, kUsed);
             const cocok = refMap
