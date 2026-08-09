@@ -380,28 +380,33 @@ export default function Clustering() {
 
   const hasilBySiswa = new Map((hasilKlaster as any[]).map((h) => [h.siswa_id, h]));
 
-  /** Centroid akhir per klaster (rata-rata anggota) + jarak tiap siswa ke setiap centroid. */
+  /**
+   * Centroid akhir per klaster dihitung dari rata-rata NILAI MENTAH anggota,
+   * lalu jarak Euclidean (berakar) tiap siswa ke setiap centroid — sama seperti
+   * perhitungan manual di Excel. `nearest` berisi nilai jarak terkecil (angka),
+   * `nearestIdx` nomor centroid terdekat.
+   */
   const groupDistances = (
     members: any[],
-    normalized: number[][],
+    matrix: number[][],
     kUsed: number
-  ): { dists: number[][]; nearest: number[] } => {
-    const dim = normalized[0]?.length ?? 0;
+  ): { dists: number[][]; nearest: number[]; nearestIdx: number[] } => {
+    const dim = matrix[0]?.length ?? 0;
     const centroids: number[][] = Array.from({ length: kUsed }, (_, ci) => {
       const idx = members
         .map((s, i) => (hasilBySiswa.get(s.id)?.klaster === ci + 1 ? i : -1))
         .filter((i) => i >= 0);
       if (idx.length === 0) return new Array(dim).fill(0);
       const sum = new Array(dim).fill(0);
-      for (const i of idx) for (let d = 0; d < dim; d++) sum[d] += normalized[i][d] ?? 0;
+      for (const i of idx) for (let d = 0; d < dim; d++) sum[d] += matrix[i][d] ?? 0;
       return sum.map((v) => v / idx.length);
     });
-    const dists = normalized.map((p) =>
-      centroids.map((c) => Math.sqrt(squaredDistance(p, c)))
-    );
-    const nearest = dists.map((row) => row.indexOf(Math.min(...row)) + 1);
-    return { dists, nearest };
+    const dists = matrix.map((p) => centroids.map((c) => Math.sqrt(squaredDistance(p, c))));
+    const nearest = dists.map((row) => Math.min(...row));
+    const nearestIdx = dists.map((row) => row.indexOf(Math.min(...row)) + 1);
+    return { dists, nearest, nearestIdx };
   };
+
 
   const handleExport = () => {
     if ((hasilKlaster as any[]).length === 0) {
@@ -438,7 +443,7 @@ export default function Clustering() {
       const { members, feats, raw, normalized } = groupData(g);
       if (members.length === 0 || feats.length === 0) continue;
       const kUsed = hasilBySiswa.get(members[0]?.id)?.k_used ?? getK(g);
-      const { dists, nearest } = groupDistances(members, normalized, kUsed);
+      const { dists, nearest } = groupDistances(members, raw, kUsed);
       const header = [
         "No",
         "Nama",
@@ -459,7 +464,7 @@ export default function Clustering() {
           ...raw[i].map((v) => Number(v.toFixed(2))),
           ...normalized[i].map((v) => Number(v.toFixed(4))),
           ...dists[i].map((v) => Number(v.toFixed(6))),
-          nearest[i],
+          Number(nearest[i].toFixed(6)),
           h?.klaster ?? "",
           h?.label ?? (h ? excelLabel(g.nama, h.k_used ?? getK(g), h.klaster) ?? clusterLabel(h.klaster, h.k_used ?? getK(g)) : ""),
         ];
@@ -724,9 +729,12 @@ export default function Clustering() {
             if (rows.length === 0) return null;
 
             const kUsed = hasilBySiswa.get(members[0]?.id)?.k_used ?? getK(g);
-            const { dists, nearest } = groupDistances(members, normalized, kUsed);
-            const distById = new Map<string, { d: number[]; n: number }>(
-              members.map((s: any, i: number) => [s.id, { d: dists[i], n: nearest[i] }])
+            const { dists, nearest, nearestIdx } = groupDistances(members, raw, kUsed);
+            const distById = new Map<string, { d: number[]; n: number; ni: number }>(
+              members.map((s: any, i: number) => [
+                s.id,
+                { d: dists[i], n: nearest[i], ni: nearestIdx[i] },
+              ])
             );
             const refMap = excelClusterMap(g.nama, kUsed);
             const cocok = refMap
@@ -799,15 +807,15 @@ export default function Clustering() {
                                   <TableCell
                                     key={`c${ci}`}
                                     className={`text-center text-xs tabular-nums ${
-                                      dist?.n === ci + 1 ? "font-semibold" : "text-muted-foreground"
+                                      dist?.ni === ci + 1 ? "font-semibold" : "text-muted-foreground"
                                     }`}
                                   >
                                     {dist ? dist.d[ci].toFixed(6) : "-"}
                                   </TableCell>
                                 ))}
                               {isAdmin && (
-                                <TableCell className="text-center text-xs font-medium">
-                                  {dist ? `C${dist.n}` : "-"}
+                                <TableCell className="text-center text-xs font-medium tabular-nums">
+                                  {dist ? dist.n.toFixed(6) : "-"}
                                 </TableCell>
                               )}
                               <TableCell className="text-right sticky right-0 bg-background">
