@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Play, RotateCcw, Download } from "lucide-react";
 import { toast } from "sonner";
-import { kMeans, DataPoint } from "@/lib/kmeans";
+import { kMeans, DataPoint, squaredDistance } from "@/lib/kmeans";
 import { minMaxNormalize } from "@/lib/normalize";
 import { runElbow, ElbowResult } from "@/lib/elbow";
 import { clusterLabel, labelClass } from "@/lib/labels";
@@ -380,40 +380,73 @@ export default function Clustering() {
 
   const hasilBySiswa = new Map((hasilKlaster as any[]).map((h) => [h.siswa_id, h]));
 
+  /** Centroid akhir per klaster (rata-rata anggota) + jarak tiap siswa ke setiap centroid. */
+  const groupDistances = (
+    members: any[],
+    normalized: number[][],
+    kUsed: number
+  ): { dists: number[][]; nearest: number[] } => {
+    const dim = normalized[0]?.length ?? 0;
+    const centroids: number[][] = Array.from({ length: kUsed }, (_, ci) => {
+      const idx = members
+        .map((s, i) => (hasilBySiswa.get(s.id)?.klaster === ci + 1 ? i : -1))
+        .filter((i) => i >= 0);
+      if (idx.length === 0) return new Array(dim).fill(0);
+      const sum = new Array(dim).fill(0);
+      for (const i of idx) for (let d = 0; d < dim; d++) sum[d] += normalized[i][d] ?? 0;
+      return sum.map((v) => v / idx.length);
+    });
+    const dists = normalized.map((p) =>
+      centroids.map((c) => Math.sqrt(squaredDistance(p, c)))
+    );
+    const nearest = dists.map((row) => row.indexOf(Math.min(...row)) + 1);
+    return { dists, nearest };
+  };
+
   const handleExport = () => {
     if ((hasilKlaster as any[]).length === 0) {
       toast.error("Belum ada hasil klasterisasi untuk diekspor");
       return;
     }
+    const groups = targetGroups.length > 0 ? targetGroups : kelasGroups;
     const wb = XLSX.utils.book_new();
 
-    // Sheet ringkasan pengujian Elbow
-    const elbowRows: any[][] = [["Kelompok", "Perubahan K", "WCSS Sebelum", "WCSS Sesudah", "% Penurunan", "K Optimal"]];
-    for (const g of kelasGroups) {
-      const el = elbowByGroup.get(g.key);
-      if (!el) continue;
-      for (const p of el.transitions) {
-        elbowRows.push([
-          g.nama,
-          `K${p.fromK} → K${p.toK}`,
-          p.before,
-          p.after,
-          Number(p.penurunan.toFixed(8)),
-          getK(g),
-        ]);
+    // Sheet ringkasan pengujian Elbow (khusus admin)
+    if (isAdmin) {
+      const elbowRows: any[][] = [["Kelompok", "Perubahan K", "WCSS Sebelum", "WCSS Sesudah", "% Penurunan", "K Optimal"]];
+      for (const g of groups) {
+        const el = elbowByGroup.get(g.key);
+        if (!el) continue;
+        for (const p of el.transitions) {
+          elbowRows.push([
+            g.nama,
+            `K${p.fromK} → K${p.toK}`,
+            p.before,
+            p.after,
+            Number(p.penurunan.toFixed(8)),
+            getK(g),
+          ]);
+        }
+      }
+      if (elbowRows.length > 1) {
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(elbowRows), "Pengujian Elbow");
       }
     }
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(elbowRows), "Pengujian Elbow");
 
-    for (const g of kelasGroups) {
+    let sheets = 0;
+    for (const g of groups) {
       const { members, feats, raw, normalized } = groupData(g);
       if (members.length === 0 || feats.length === 0) continue;
+      const kUsed = hasilBySiswa.get(members[0]?.id)?.k_used ?? getK(g);
+      const { dists, nearest } = groupDistances(members, normalized, kUsed);
       const header = [
         "No",
         "Nama",
         "Jurusan",
         ...feats.map((f) => f.nama),
         ...feats.map((f) => `${f.nama} (Norm)`),
+        ...Array.from({ length: kUsed }, (_, i) => `C${i + 1}`),
+        "Terdekat",
         "Klaster",
         "Keterangan",
       ];
@@ -425,16 +458,30 @@ export default function Clustering() {
           s.jurusan?.nama ?? "",
           ...raw[i].map((v) => Number(v.toFixed(2))),
           ...normalized[i].map((v) => Number(v.toFixed(4))),
+          ...dists[i].map((v) => Number(v.toFixed(6))),
+          nearest[i],
           h?.klaster ?? "",
           h?.label ?? (h ? excelLabel(g.nama, h.k_used ?? getK(g), h.klaster) ?? clusterLabel(h.klaster, h.k_used ?? getK(g)) : ""),
         ];
       });
       const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
       XLSX.utils.book_append_sheet(wb, ws, g.nama.substring(0, 31));
+      sheets++;
     }
-    XLSX.writeFile(wb, `Hasil_Klasterisasi_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    if (sheets === 0) {
+      toast.error("Tidak ada data pada kelompok yang dipilih");
+      return;
+    }
+    const scope =
+      kelompokFilter !== "all"
+        ? groups[0]?.nama.replace(/[\\/:*?[\]]/g, "-")
+        : tahunFilter !== "all"
+        ? tahunFilter.replace("/", "-")
+        : "Semua";
+    XLSX.writeFile(wb, `Hasil_Klasterisasi_${scope}_${new Date().toISOString().slice(0, 10)}.xlsx`);
     toast.success("Berhasil mengekspor hasil klasterisasi");
   };
+
 
   const visibleGroups = targetGroups;
 
@@ -677,6 +724,10 @@ export default function Clustering() {
             if (rows.length === 0) return null;
 
             const kUsed = hasilBySiswa.get(members[0]?.id)?.k_used ?? getK(g);
+            const { dists, nearest } = groupDistances(members, normalized, kUsed);
+            const distById = new Map<string, { d: number[]; n: number }>(
+              members.map((s: any, i: number) => [s.id, { d: dists[i], n: nearest[i] }])
+            );
             const refMap = excelClusterMap(g.nama, kUsed);
             const cocok = refMap
               ? members.filter(
@@ -718,6 +769,11 @@ export default function Clustering() {
                           {feats.map((f) => (
                             <TableHead key={f.id} className="text-center">{f.nama}</TableHead>
                           ))}
+                          {isAdmin &&
+                            Array.from({ length: kUsed }, (_, i) => (
+                              <TableHead key={`c${i}`} className="text-center">C{i + 1}</TableHead>
+                            ))}
+                          {isAdmin && <TableHead className="text-center">Terdekat</TableHead>}
                           <TableHead className="text-right sticky right-0 bg-background">Klaster</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -725,6 +781,7 @@ export default function Clustering() {
                         {rows.map((r, i) => {
                           const h = hasilBySiswa.get(r.s.id);
                           const lab = h?.label ?? (h ? excelLabel(g.nama, h.k_used ?? getK(g), h.klaster) ?? clusterLabel(h.klaster, h.k_used ?? getK(g)) : null);
+                          const dist = distById.get(r.s.id);
                           return (
                             <TableRow key={r.s.id}>
                               <TableCell>{i + 1}</TableCell>
@@ -737,6 +794,22 @@ export default function Clustering() {
                                   {showNormalized ? r.norm[ci].toFixed(3) : Math.round(r.raw[ci])}
                                 </TableCell>
                               ))}
+                              {isAdmin &&
+                                Array.from({ length: kUsed }, (_, ci) => (
+                                  <TableCell
+                                    key={`c${ci}`}
+                                    className={`text-center text-xs tabular-nums ${
+                                      dist?.n === ci + 1 ? "font-semibold" : "text-muted-foreground"
+                                    }`}
+                                  >
+                                    {dist ? dist.d[ci].toFixed(6) : "-"}
+                                  </TableCell>
+                                ))}
+                              {isAdmin && (
+                                <TableCell className="text-center text-xs font-medium">
+                                  {dist ? `C${dist.n}` : "-"}
+                                </TableCell>
+                              )}
                               <TableCell className="text-right sticky right-0 bg-background">
                                 {h ? (
                                   <Badge className={labelClass(lab ?? "")} title={lab ?? undefined}>

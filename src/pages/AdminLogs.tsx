@@ -329,7 +329,7 @@ export default function AdminLogs() {
                       <TableCell className="font-medium">{r.user_nama ?? r.user_id}</TableCell>
                       <TableCell>
                         {r.action === "run" ? (
-                          <Badge>Hasil K-Means</Badge>
+                          <Badge>Jalankan K-Means</Badge>
                         ) : (
                           <Badge variant="secondary">Reset Hasil</Badge>
                         )}
