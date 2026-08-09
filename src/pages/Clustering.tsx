@@ -769,6 +769,11 @@ export default function Clustering() {
                           {feats.map((f) => (
                             <TableHead key={f.id} className="text-center">{f.nama}</TableHead>
                           ))}
+                          {isAdmin &&
+                            Array.from({ length: kUsed }, (_, i) => (
+                              <TableHead key={`c${i}`} className="text-center">C{i + 1}</TableHead>
+                            ))}
+                          {isAdmin && <TableHead className="text-center">Terdekat</TableHead>}
                           <TableHead className="text-right sticky right-0 bg-background">Klaster</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -776,6 +781,7 @@ export default function Clustering() {
                         {rows.map((r, i) => {
                           const h = hasilBySiswa.get(r.s.id);
                           const lab = h?.label ?? (h ? excelLabel(g.nama, h.k_used ?? getK(g), h.klaster) ?? clusterLabel(h.klaster, h.k_used ?? getK(g)) : null);
+                          const dist = distById.get(r.s.id);
                           return (
                             <TableRow key={r.s.id}>
                               <TableCell>{i + 1}</TableCell>
@@ -788,6 +794,22 @@ export default function Clustering() {
                                   {showNormalized ? r.norm[ci].toFixed(3) : Math.round(r.raw[ci])}
                                 </TableCell>
                               ))}
+                              {isAdmin &&
+                                Array.from({ length: kUsed }, (_, ci) => (
+                                  <TableCell
+                                    key={`c${ci}`}
+                                    className={`text-center text-xs tabular-nums ${
+                                      dist?.n === ci + 1 ? "font-semibold" : "text-muted-foreground"
+                                    }`}
+                                  >
+                                    {dist ? dist.d[ci].toFixed(6) : "-"}
+                                  </TableCell>
+                                ))}
+                              {isAdmin && (
+                                <TableCell className="text-center text-xs font-medium">
+                                  {dist ? `C${dist.n}` : "-"}
+                                </TableCell>
+                              )}
                               <TableCell className="text-right sticky right-0 bg-background">
                                 {h ? (
                                   <Badge className={labelClass(lab ?? "")} title={lab ?? undefined}>
