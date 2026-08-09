@@ -443,7 +443,7 @@ export default function Clustering() {
       const { members, feats, raw, normalized } = groupData(g);
       if (members.length === 0 || feats.length === 0) continue;
       const kUsed = hasilBySiswa.get(members[0]?.id)?.k_used ?? getK(g);
-      const { dists, nearest } = groupDistances(members, normalized, kUsed);
+      const { dists, nearest } = groupDistances(members, raw, kUsed);
       const header = [
         "No",
         "Nama",
