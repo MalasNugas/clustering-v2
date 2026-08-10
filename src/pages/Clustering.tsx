@@ -788,7 +788,15 @@ export default function Clustering() {
                 { d: dists[i], n: nearest[i], ni: nearestIdx[i] },
               ])
             );
-            const refMap = excelClusterMap(g.nama, kUsed);
+            const kelasSheet = kelasSheetForGroup(g.nama);
+            const refMap = kelasSheet
+              ? new Map<string, number>(
+                  members.map((s: any) => [
+                    normalizeSiswaName(s.nama),
+                    kelasResult(kelasSheet, s.nama)?.cluster ?? -1,
+                  ])
+                )
+              : excelClusterMap(g.nama, kUsed);
             const cocok = refMap
               ? members.filter(
                   (s: any) =>
