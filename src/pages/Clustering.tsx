@@ -395,19 +395,6 @@ export default function Clustering() {
     matrix: number[][],
     kUsed: number
   ): { dists: number[][]; nearest: number[]; nearestIdx: number[] } => {
-    // Kelompok yang mengikuti acuan gabungan: angka diambil langsung dari file Excel
-    const sheet = kelasSheetForGroup(group.nama);
-    if (sheet) {
-      const refs = members.map((s: any) => kelasResult(sheet, s.nama));
-      if (refs.every((r) => r)) {
-        const dists = refs.map((r) => r!.dists.slice(0, kUsed));
-        return {
-          dists,
-          nearest: refs.map((r) => r!.nearest),
-          nearestIdx: dists.map((row) => row.indexOf(Math.min(...row)) + 1),
-        };
-      }
-    }
 
     const dim = matrix[0]?.length ?? 0;
     const centroids: number[][] = Array.from({ length: kUsed }, (_, ci) => {
@@ -776,15 +763,7 @@ export default function Clustering() {
                 { d: dists[i], n: nearest[i], ni: nearestIdx[i] },
               ])
             );
-            const kelasSheet = kelasSheetForGroup(g.nama);
-            const refMap = kelasSheet
-              ? new Map<string, number>(
-                  members.map((s: any) => [
-                    normalizeSiswaName(s.nama),
-                    kelasResult(kelasSheet, s.nama)?.cluster ?? -1,
-                  ])
-                )
-              : excelClusterMap(g.nama, kUsed);
+            const refMap = excelClusterMap(g.nama, kUsed);
             const cocok = refMap
               ? members.filter(
                   (s: any) =>
