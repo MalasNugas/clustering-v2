@@ -19,7 +19,7 @@ import { logClustering, ClusteringLogDetail } from "@/lib/clusteringLog";
 import { EXCEL_ELBOW_REFERENCE, normalizeGroupName } from "@/lib/excelReference";
 import { excelClusterMap, normalizeSiswaName } from "@/lib/excelClusters";
 import { excelLabel } from "@/lib/excelLabels";
-import { kelasSheetForGroup, kelasResult } from "@/lib/excelKelasResults";
+
 import {
   Line,
   LineChart,
@@ -180,9 +180,6 @@ export default function Clustering() {
     const out = new Map<string, ElbowResult>();
     if (!isAdmin) return out;
     for (const g of kelasGroups) {
-      // Kelompok yang mengikuti acuan gabungan (Hasil_Klasterisasi.xlsx) memakai K=3 tetap
-      // dan tidak punya tabel WCSS pada file acuan.
-      if (kelasSheetForGroup(g.nama)) continue;
       const { members, feats, normalized } = groupData(g);
       if (members.length < 2 || feats.length === 0) continue;
       const dp: DataPoint[] = members.map((s: any, i: number) => ({ id: s.id, values: normalized[i] }));
@@ -203,11 +200,7 @@ export default function Clustering() {
   }, [kelasGroups, elbowByGroup, isAdmin]);
 
   const getK = (g: KelasGroup) =>
-    kelasSheetForGroup(g.nama)
-      ? 3
-      : isAdmin
-      ? kByGroup[g.key] ?? elbowByGroup.get(g.key)?.optimalK ?? 3
-      : 3;
+    isAdmin ? kByGroup[g.key] ?? elbowByGroup.get(g.key)?.optimalK ?? 3 : 3;
 
 
   const tahunGroups = useMemo(
