@@ -291,10 +291,13 @@ export default function Clustering() {
 
         // Nomor klaster mengikuti hasil perhitungan manual di Excel bila tersedia.
         const excelMap = excelClusterMap(g.nama, K);
+        // Kelompok yang mengikuti acuan gabungan KELAS 10/11 (nilai mentah, K=3)
+        const kelasSheet = kelasSheetForGroup(g.nama);
 
         results.forEach((r, i) => {
+          const fromKelas = kelasSheet ? kelasResult(kelasSheet, members[i].nama)?.cluster : undefined;
           const fromExcel = excelMap?.get(normalizeSiswaName(members[i].nama));
-          const klaster = fromExcel ?? r.cluster;
+          const klaster = fromKelas ?? fromExcel ?? r.cluster;
           allInsert.push({
             siswa_id: r.id,
             klaster,
@@ -302,7 +305,9 @@ export default function Clustering() {
             jurusan_id: members[i].jurusan_id,
             k_used: K,
             // Penamaan label mengikuti dokumen PENAMAAN_LABEL.docx
-            label: excelLabel(g.nama, K, klaster) ?? clusterLabel(klaster, K),
+            label: kelasSheet
+              ? clusterLabel(klaster, K)
+              : excelLabel(g.nama, K, klaster) ?? clusterLabel(klaster, K),
           });
         });
 
