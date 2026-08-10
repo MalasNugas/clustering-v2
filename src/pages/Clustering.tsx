@@ -180,7 +180,6 @@ export default function Clustering() {
     const out = new Map<string, ElbowResult>();
     if (!isAdmin) return out;
     for (const g of kelasGroups) {
-    for (const g of kelasGroups) {
       // Kelompok yang mengikuti acuan gabungan (Hasil_Klasterisasi.xlsx) memakai K=3 tetap
       // dan tidak punya tabel WCSS pada file acuan.
       if (kelasSheetForGroup(g.nama)) continue;
