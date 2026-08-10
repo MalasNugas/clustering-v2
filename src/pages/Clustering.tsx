@@ -19,6 +19,7 @@ import { logClustering, ClusteringLogDetail } from "@/lib/clusteringLog";
 import { EXCEL_ELBOW_REFERENCE, normalizeGroupName } from "@/lib/excelReference";
 import { excelClusterMap, normalizeSiswaName } from "@/lib/excelClusters";
 import { excelLabel } from "@/lib/excelLabels";
+import { kelasSheetForGroup, kelasResult } from "@/lib/excelKelasResults";
 import {
   Line,
   LineChart,
@@ -179,6 +180,9 @@ export default function Clustering() {
     const out = new Map<string, ElbowResult>();
     if (!isAdmin) return out;
     for (const g of kelasGroups) {
+      // Kelompok yang mengikuti acuan gabungan (Hasil_Klasterisasi.xlsx) memakai K=3 tetap
+      // dan tidak punya tabel WCSS pada file acuan.
+      if (kelasSheetForGroup(g.nama)) continue;
       const { members, feats, normalized } = groupData(g);
       if (members.length < 2 || feats.length === 0) continue;
       const dp: DataPoint[] = members.map((s: any, i: number) => ({ id: s.id, values: normalized[i] }));
@@ -198,7 +202,13 @@ export default function Clustering() {
     });
   }, [kelasGroups, elbowByGroup, isAdmin]);
 
-  const getK = (g: KelasGroup) => (isAdmin ? kByGroup[g.key] ?? elbowByGroup.get(g.key)?.optimalK ?? 3 : 3);
+  const getK = (g: KelasGroup) =>
+    kelasSheetForGroup(g.nama)
+      ? 3
+      : isAdmin
+      ? kByGroup[g.key] ?? elbowByGroup.get(g.key)?.optimalK ?? 3
+      : 3;
+
 
   const tahunGroups = useMemo(
     () => kelasGroups.filter((g) => tahunFilter === "all" || g.tahunAjaran === tahunFilter),
@@ -281,10 +291,13 @@ export default function Clustering() {
 
         // Nomor klaster mengikuti hasil perhitungan manual di Excel bila tersedia.
         const excelMap = excelClusterMap(g.nama, K);
+        // Kelompok yang mengikuti acuan gabungan KELAS 10/11 (nilai mentah, K=3)
+        const kelasSheet = kelasSheetForGroup(g.nama);
 
         results.forEach((r, i) => {
+          const fromKelas = kelasSheet ? kelasResult(kelasSheet, members[i].nama)?.cluster : undefined;
           const fromExcel = excelMap?.get(normalizeSiswaName(members[i].nama));
-          const klaster = fromExcel ?? r.cluster;
+          const klaster = fromKelas ?? fromExcel ?? r.cluster;
           allInsert.push({
             siswa_id: r.id,
             klaster,
@@ -292,7 +305,9 @@ export default function Clustering() {
             jurusan_id: members[i].jurusan_id,
             k_used: K,
             // Penamaan label mengikuti dokumen PENAMAAN_LABEL.docx
-            label: excelLabel(g.nama, K, klaster) ?? clusterLabel(klaster, K),
+            label: kelasSheet
+              ? clusterLabel(klaster, K)
+              : excelLabel(g.nama, K, klaster) ?? clusterLabel(klaster, K),
           });
         });
 
@@ -387,10 +402,25 @@ export default function Clustering() {
    * `nearestIdx` nomor centroid terdekat.
    */
   const groupDistances = (
+    group: KelasGroup,
     members: any[],
     matrix: number[][],
     kUsed: number
   ): { dists: number[][]; nearest: number[]; nearestIdx: number[] } => {
+    // Kelompok yang mengikuti acuan gabungan: angka diambil langsung dari file Excel
+    const sheet = kelasSheetForGroup(group.nama);
+    if (sheet) {
+      const refs = members.map((s: any) => kelasResult(sheet, s.nama));
+      if (refs.every((r) => r)) {
+        const dists = refs.map((r) => r!.dists.slice(0, kUsed));
+        return {
+          dists,
+          nearest: refs.map((r) => r!.nearest),
+          nearestIdx: dists.map((row) => row.indexOf(Math.min(...row)) + 1),
+        };
+      }
+    }
+
     const dim = matrix[0]?.length ?? 0;
     const centroids: number[][] = Array.from({ length: kUsed }, (_, ci) => {
       const idx = members
@@ -459,7 +489,7 @@ export default function Clustering() {
         const { members, feats, raw, normalized } = groupData(g);
         if (members.length === 0 || feats.length === 0) continue;
         const kUsed = hasilBySiswa.get(members[0]?.id)?.k_used ?? getK(g);
-        const { dists, nearest } = groupDistances(members, raw, kUsed);
+        const { dists, nearest } = groupDistances(g, members, raw, kUsed);
         const header = [
           "No",
           "Nama",
@@ -751,14 +781,22 @@ export default function Clustering() {
             if (rows.length === 0) return null;
 
             const kUsed = hasilBySiswa.get(members[0]?.id)?.k_used ?? getK(g);
-            const { dists, nearest, nearestIdx } = groupDistances(members, raw, kUsed);
+            const { dists, nearest, nearestIdx } = groupDistances(g, members, raw, kUsed);
             const distById = new Map<string, { d: number[]; n: number; ni: number }>(
               members.map((s: any, i: number) => [
                 s.id,
                 { d: dists[i], n: nearest[i], ni: nearestIdx[i] },
               ])
             );
-            const refMap = excelClusterMap(g.nama, kUsed);
+            const kelasSheet = kelasSheetForGroup(g.nama);
+            const refMap = kelasSheet
+              ? new Map<string, number>(
+                  members.map((s: any) => [
+                    normalizeSiswaName(s.nama),
+                    kelasResult(kelasSheet, s.nama)?.cluster ?? -1,
+                  ])
+                )
+              : excelClusterMap(g.nama, kUsed);
             const cocok = refMap
               ? members.filter(
                   (s: any) =>
