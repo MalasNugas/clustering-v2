@@ -19,6 +19,7 @@ import { logClustering, ClusteringLogDetail } from "@/lib/clusteringLog";
 import { EXCEL_ELBOW_REFERENCE, normalizeGroupName } from "@/lib/excelReference";
 import { excelClusterMap, normalizeSiswaName } from "@/lib/excelClusters";
 import { excelLabel } from "@/lib/excelLabels";
+import { kelasSheetForGroup, kelasResult } from "@/lib/excelKelasResults";
 import {
   Line,
   LineChart,
