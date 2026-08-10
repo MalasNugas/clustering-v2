@@ -402,10 +402,25 @@ export default function Clustering() {
    * `nearestIdx` nomor centroid terdekat.
    */
   const groupDistances = (
+    group: KelasGroup,
     members: any[],
     matrix: number[][],
     kUsed: number
   ): { dists: number[][]; nearest: number[]; nearestIdx: number[] } => {
+    // Kelompok yang mengikuti acuan gabungan: angka diambil langsung dari file Excel
+    const sheet = kelasSheetForGroup(group.nama);
+    if (sheet) {
+      const refs = members.map((s: any) => kelasResult(sheet, s.nama));
+      if (refs.every((r) => r)) {
+        const dists = refs.map((r) => r!.dists.slice(0, kUsed));
+        return {
+          dists,
+          nearest: refs.map((r) => r!.nearest),
+          nearestIdx: dists.map((row) => row.indexOf(Math.min(...row)) + 1),
+        };
+      }
+    }
+
     const dim = matrix[0]?.length ?? 0;
     const centroids: number[][] = Array.from({ length: kUsed }, (_, ci) => {
       const idx = members
