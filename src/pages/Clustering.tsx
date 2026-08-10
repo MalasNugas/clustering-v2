@@ -438,40 +438,59 @@ export default function Clustering() {
       }
     }
 
+    // Excel melarang karakter / \ ? * [ ] : pada nama sheet, dan maksimal 31 karakter.
+    const usedNames = new Set<string>();
+    const safeSheetName = (name: string) => {
+      let base = name.replace(/[\\/:*?[\]]/g, "-").trim().substring(0, 31) || "Sheet";
+      let candidate = base;
+      let n = 2;
+      while (usedNames.has(candidate.toLowerCase())) {
+        const suffix = ` (${n++})`;
+        candidate = base.substring(0, 31 - suffix.length) + suffix;
+      }
+      usedNames.add(candidate.toLowerCase());
+      return candidate;
+    };
+
     let sheets = 0;
+    const failed: string[] = [];
     for (const g of groups) {
-      const { members, feats, raw, normalized } = groupData(g);
-      if (members.length === 0 || feats.length === 0) continue;
-      const kUsed = hasilBySiswa.get(members[0]?.id)?.k_used ?? getK(g);
-      const { dists, nearest } = groupDistances(members, raw, kUsed);
-      const header = [
-        "No",
-        "Nama",
-        "Jurusan",
-        ...feats.map((f) => f.nama),
-        ...feats.map((f) => `${f.nama} (Norm)`),
-        ...Array.from({ length: kUsed }, (_, i) => `C${i + 1}`),
-        "Terdekat",
-        "Klaster",
-        "Keterangan",
-      ];
-      const rows = members.map((s: any, i: number) => {
-        const h = hasilBySiswa.get(s.id);
-        return [
-          i + 1,
-          s.nama,
-          s.jurusan?.nama ?? "",
-          ...raw[i].map((v) => Number(v.toFixed(2))),
-          ...normalized[i].map((v) => Number(v.toFixed(4))),
-          ...dists[i].map((v) => Number(v.toFixed(6))),
-          Number(nearest[i].toFixed(6)),
-          h?.klaster ?? "",
-          h?.label ?? (h ? excelLabel(g.nama, h.k_used ?? getK(g), h.klaster) ?? clusterLabel(h.klaster, h.k_used ?? getK(g)) : ""),
+      try {
+        const { members, feats, raw, normalized } = groupData(g);
+        if (members.length === 0 || feats.length === 0) continue;
+        const kUsed = hasilBySiswa.get(members[0]?.id)?.k_used ?? getK(g);
+        const { dists, nearest } = groupDistances(members, raw, kUsed);
+        const header = [
+          "No",
+          "Nama",
+          "Jurusan",
+          ...feats.map((f) => f.nama),
+          ...feats.map((f) => `${f.nama} (Norm)`),
+          ...Array.from({ length: kUsed }, (_, i) => `C${i + 1}`),
+          "Terdekat",
+          "Klaster",
+          "Keterangan",
         ];
-      });
-      const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
-      XLSX.utils.book_append_sheet(wb, ws, g.nama.substring(0, 31));
-      sheets++;
+        const rows = members.map((s: any, i: number) => {
+          const h = hasilBySiswa.get(s.id);
+          return [
+            i + 1,
+            s.nama,
+            s.jurusan?.nama ?? "",
+            ...raw[i].map((v) => Number(v.toFixed(2))),
+            ...normalized[i].map((v) => Number(v.toFixed(4))),
+            ...dists[i].map((v) => Number(v.toFixed(6))),
+            Number(nearest[i].toFixed(6)),
+            h?.klaster ?? "",
+            h?.label ?? (h ? excelLabel(g.nama, h.k_used ?? getK(g), h.klaster) ?? clusterLabel(h.klaster, h.k_used ?? getK(g)) : ""),
+          ];
+        });
+        const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+        XLSX.utils.book_append_sheet(wb, ws, safeSheetName(g.nama));
+        sheets++;
+      } catch {
+        failed.push(g.nama);
+      }
     }
     if (sheets === 0) {
       toast.error("Tidak ada data pada kelompok yang dipilih");
@@ -481,10 +500,13 @@ export default function Clustering() {
       kelompokFilter !== "all"
         ? groups[0]?.nama.replace(/[\\/:*?[\]]/g, "-")
         : tahunFilter !== "all"
-        ? tahunFilter.replace("/", "-")
+        ? tahunFilter.replace(/[\\/:*?[\]]/g, "-")
         : "Semua";
     XLSX.writeFile(wb, `Hasil_Klasterisasi_${scope}_${new Date().toISOString().slice(0, 10)}.xlsx`);
     toast.success("Berhasil mengekspor hasil klasterisasi");
+    if (failed.length > 0) {
+      toast.warning(`Kelompok gagal diekspor: ${failed.join(", ")}`);
+    }
   };
 
 
