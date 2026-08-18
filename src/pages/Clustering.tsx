@@ -465,7 +465,7 @@ export default function Clustering() {
         const { members, feats, raw, normalized } = groupData(g);
         if (members.length === 0 || feats.length === 0) continue;
         const kUsed = hasilBySiswa.get(members[0]?.id)?.k_used ?? getK(g);
-        const { dists, nearest } = groupDistances(g, members, raw, kUsed);
+        const { dists, nearest } = groupDistances(g, members, normalized, kUsed);
         const header = [
           "No",
           "Nama",
@@ -757,7 +757,7 @@ export default function Clustering() {
             if (rows.length === 0) return null;
 
             const kUsed = hasilBySiswa.get(members[0]?.id)?.k_used ?? getK(g);
-            const { dists, nearest, nearestIdx } = groupDistances(g, members, raw, kUsed);
+            const { dists, nearest, nearestIdx } = groupDistances(g, members, normalized, kUsed);
             const distById = new Map<string, { d: number[]; n: number; ni: number }>(
               members.map((s: any, i: number) => [
                 s.id,
