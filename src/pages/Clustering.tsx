@@ -384,10 +384,10 @@ export default function Clustering() {
   const hasilBySiswa = new Map((hasilKlaster as any[]).map((h) => [h.siswa_id, h]));
 
   /**
-   * Centroid akhir per klaster dihitung dari rata-rata NILAI MENTAH anggota,
-   * lalu jarak Euclidean (berakar) tiap siswa ke setiap centroid — sama seperti
-   * perhitungan manual di Excel. `nearest` berisi nilai jarak terkecil (angka),
-   * `nearestIdx` nomor centroid terdekat.
+   * Centroid akhir per klaster dihitung dari rata-rata NILAI NORMALISASI anggota,
+   * lalu jarak Euclidean KUADRAT (tanpa akar) tiap siswa ke setiap centroid —
+   * sama seperti perhitungan manual di Excel. `nearest` berisi nilai jarak
+   * terkecil (angka), `nearestIdx` nomor centroid terdekat.
    */
   const groupDistances = (
     group: KelasGroup,
@@ -406,7 +406,8 @@ export default function Clustering() {
       for (const i of idx) for (let d = 0; d < dim; d++) sum[d] += matrix[i][d] ?? 0;
       return sum.map((v) => v / idx.length);
     });
-    const dists = matrix.map((p) => centroids.map((c) => Math.sqrt(squaredDistance(p, c))));
+    const dists = matrix.map((p) => centroids.map((c) => squaredDistance(p, c)));
+
     const nearest = dists.map((row) => Math.min(...row));
     const nearestIdx = dists.map((row) => row.indexOf(Math.min(...row)) + 1);
     return { dists, nearest, nearestIdx };
